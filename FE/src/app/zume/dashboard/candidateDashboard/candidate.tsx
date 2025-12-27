@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   FileText, Plus, ArrowRight, TrendingUp, 
   Calendar, CheckCircle2, ChevronRight, Loader2,
   FileSearch, BarChart3, Clock, AlertCircle, Target,
-  Award, Zap, Eye, Star, Download
+  Award, Zap, Eye, Star, Download, X, AlertTriangle,
+  Globe, ExternalLink, Sparkles
 } from "lucide-react";
-import { getAnalysisHistoryHandler, type AnalysisHistoryItem } from "@/handler/analyzeHandler";
+import { getAnalysisHistoryHandler, getAnalysisDetailHandler, type AnalysisHistoryItem } from "@/handler/analyzeHandler";
 import { useRouter } from "next/navigation";
 
 export default function CandidateDashboard() {
@@ -17,6 +18,11 @@ export default function CandidateDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  
+  // Modal state
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState<string | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [analysisDetail, setAnalysisDetail] = useState<any>(null);
 
   useEffect(() => {
     fetchAnalysisHistory();
@@ -35,6 +41,25 @@ export default function CandidateDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleViewAnalysis = async (analysisId: string) => {
+    setSelectedAnalysisId(analysisId);
+    setModalLoading(true);
+    try {
+      const response = await getAnalysisDetailHandler(analysisId);
+      setAnalysisDetail(response.analysis);
+    } catch (err) {
+      console.error("Failed to fetch analysis detail:", err);
+      setAnalysisDetail(null);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    setSelectedAnalysisId(null);
+    setAnalysisDetail(null);
   };
 
   const getScoreColor = (score: number) => {
@@ -237,7 +262,7 @@ export default function CandidateDashboard() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.05, type: "spring", stiffness: 100 }}
                   className="group relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg transition-all cursor-pointer overflow-hidden"
-                  onClick={() => router.push(`/zume/resume/analyze/history/${analysis.id}`)}
+                  onClick={() => handleViewAnalysis(analysis.id)}
                 >
                   {/* Score Badge - Left indicator */}
                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
@@ -370,7 +395,10 @@ export default function CandidateDashboard() {
                   </div>
 
                   <button 
-                    onClick={() => router.push(`/zume/resume/analyze/history/${analyses[0].id}`)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleViewAnalysis(analyses[0].id);
+                    }}
                     className="w-full py-3 bg-white text-blue-600 font-bold rounded-xl hover:bg-white/90 transition-all shadow-lg"
                   >
                     View Full Report
@@ -439,6 +467,189 @@ export default function CandidateDashboard() {
         </div>
 
       </div>
+
+      {/* Analysis Detail Modal */}
+      <AnimatePresence>
+        {selectedAnalysisId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={closeModal}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", duration: 0.3 }}
+              className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 rounded-2xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="sticky top-0 z-10 flex items-center justify-between p-6 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white">Resume Analysis Report</h2>
+                <button
+                  onClick={closeModal}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6">
+                {modalLoading ? (
+                  <div className="flex flex-col items-center justify-center py-20">
+                    <Loader2 className="w-12 h-12 animate-spin text-blue-500 mb-4" />
+                    <p className="text-gray-600 dark:text-gray-400">Loading analysis...</p>
+                  </div>
+                ) : analysisDetail ? (
+                  <div className="space-y-6">
+                    {/* File Info */}
+                    <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+                      <FileText className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+                      <div className="flex-1">
+                        <h3 className="font-bold text-gray-900 dark:text-white">{analysisDetail.file_info.name}</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {(analysisDetail.file_info.size / 1024).toFixed(2)} KB • {analysisDetail.file_info.type}
+                        </p>
+                      </div>
+                      {analysisDetail.job_context?.job_title && (
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Job Targeted</p>
+                          <p className="font-semibold text-gray-900 dark:text-white">{analysisDetail.job_context.job_title}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Scores Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <ScoreCard label="Overall" score={analysisDetail.scores.overall_score} />
+                      <ScoreCard label="ATS" score={analysisDetail.scores.ats_score} />
+                      <ScoreCard label="Formatting" score={analysisDetail.scores.formatting_score} />
+                      <ScoreCard label="Content" score={analysisDetail.scores.content_quality_score} />
+                      <ScoreCard label="Keywords" score={analysisDetail.scores.keyword_optimization_score} />
+                    </div>
+
+                    {/* Strengths */}
+                    {analysisDetail.strengths && analysisDetail.strengths.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Strengths
+                        </h3>
+                        <div className="space-y-2">
+                          {analysisDetail.strengths.map((strength: string, i: number) => (
+                            <div key={i} className="flex items-start gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+                              <div className="w-2 h-2 rounded-full bg-emerald-600 mt-2"></div>
+                              <p className="text-sm text-gray-700 dark:text-gray-300 flex-1">{strength}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Weaknesses */}
+                    {analysisDetail.weaknesses && analysisDetail.weaknesses.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                          <AlertTriangle className="w-5 h-5 text-amber-600" /> Areas for Improvement
+                        </h3>
+                        <div className="space-y-2">
+                          {analysisDetail.weaknesses.map((weakness: string, i: number) => (
+                            <div key={i} className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                              <div className="w-2 h-2 rounded-full bg-amber-600 mt-2"></div>
+                              <p className="text-sm text-gray-700 dark:text-gray-300 flex-1">{weakness}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Online Presence (if available) */}
+                    {(analysisDetail.professional_links?.length > 0 || analysisDetail.online_info) && (
+                      <div className="space-y-3">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                          <Sparkles className="w-5 h-5 text-cyan-600" /> Online Presence Analysis
+                        </h3>
+                        
+                        {/* Professional Links */}
+                        {analysisDetail.professional_links?.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                              <Globe className="w-4 h-4" /> Professional Links Found:
+                            </p>
+                            <div className="space-y-2">
+                              {analysisDetail.professional_links.map((link: string, i: number) => (
+                                <a
+                                  key={i}
+                                  href={link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors group"
+                                >
+                                  <ExternalLink className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                                  <span className="text-sm text-blue-700 dark:text-blue-300 truncate flex-1">{link}</span>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Online Information */}
+                        {analysisDetail.online_info && (
+                          <div className="p-4 bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-950/20 dark:to-blue-950/20 rounded-xl border border-cyan-200 dark:border-cyan-800">
+                            <p className="text-sm font-semibold text-cyan-900 dark:text-cyan-300 mb-2 flex items-center gap-2">
+                              <TrendingUp className="w-4 h-4" /> Findings from Your Profiles:
+                            </p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+                              {analysisDetail.online_info}
+                            </p>
+                            <div className="mt-3 pt-3 border-t border-cyan-200 dark:border-cyan-800">
+                              <p className="text-xs text-cyan-700 dark:text-cyan-400 font-medium">
+                                💡 Our AI used Google Search to discover this information and compared it with your resume
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Improvement Suggestions */}
+                    {analysisDetail.improvement_suggestions && analysisDetail.improvement_suggestions.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                          <Zap className="w-5 h-5 text-blue-600" /> Actionable Suggestions
+                        </h3>
+                        <div className="space-y-3">
+                          {analysisDetail.improvement_suggestions.map((suggestion: any, i: number) => (
+                            <div key={i} className={`p-4 rounded-xl border-l-4 ${
+                              suggestion.priority === 'high' ? 'bg-red-50 dark:bg-red-900/10 border-red-500' :
+                              suggestion.priority === 'medium' ? 'bg-blue-50 dark:bg-blue-900/10 border-blue-500' :
+                              'bg-gray-50 dark:bg-gray-800 border-gray-400'
+                            }`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="font-bold text-gray-900 dark:text-white">{suggestion.category}</h4>
+                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                  suggestion.priority === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' :
+                                  suggestion.priority === 'medium' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' :
+                                  'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                }`}>
+                                  {suggestion.priority} priority
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-700 dark:text-gray-300">{suggestion.suggestion}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-20">
+                    <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+                    <p className="text-gray-600 dark:text-gray-400">Failed to load analysis details</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -625,6 +836,23 @@ function StatItem({ icon: Icon, label, value, color = "gray" }: {
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
       </div>
       <span className="text-sm font-bold text-gray-900 dark:text-white">{value}</span>
+    </div>
+  );
+}
+
+// Score Card for Modal
+function ScoreCard({ label, score }: { label: string; score: number }) {
+  const getColor = (score: number) => {
+    if (score >= 90) return "from-emerald-500 to-emerald-600 text-emerald-50";
+    if (score >= 75) return "from-blue-500 to-blue-600 text-blue-50";
+    if (score >= 60) return "from-amber-500 to-amber-600 text-amber-50";
+    return "from-red-500 to-red-600 text-red-50";
+  };
+
+  return (
+    <div className={`p-4 rounded-xl bg-gradient-to-br ${getColor(score)} text-center`}>
+      <p className="text-xs font-semibold opacity-90 mb-1">{label}</p>
+      <p className="text-3xl font-black">{score}</p>
     </div>
   );
 }

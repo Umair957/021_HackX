@@ -9,6 +9,7 @@ import { ToastType } from "@/constants/toastData";
 import { FileUpload } from "./components/FileUpload";
 import { AnalysisResults } from "./components/AnalysisResults";
 import { ImprovementSuggestions } from "./components/ImprovementSuggestions";
+import { OnlinePresence } from "./components/OnlinePresence";
 import { analyzeResumeHandler } from "@/handler/analyzeHandler";
 
 interface AnalysisData {
@@ -24,6 +25,8 @@ interface AnalysisData {
   atsScore: number;
   readabilityScore: number;
   keywordMatch: number;
+  professionalLinks?: string[];
+  onlineInfo?: string;
 }
 
 export default function AnalyzeResumePage() {
@@ -80,6 +83,8 @@ export default function AnalyzeResumePage() {
           strengths: apiAnalysis?.strengths || [],
           weaknesses: apiAnalysis?.weaknesses || [],
           suggestions: apiAnalysis?.suggestions || [],
+          professionalLinks: apiAnalysis?.professional_links || [],
+          onlineInfo: apiAnalysis?.online_info || undefined,
         };
 
         setAnalysisData(transformedAnalysis);
@@ -229,6 +234,12 @@ export default function AnalyzeResumePage() {
 
               {/* Analysis Results */}
               <AnalysisResults data={analysisData} />
+
+              {/* Online Presence (if available) */}
+              <OnlinePresence 
+                professionalLinks={analysisData.professionalLinks}
+                onlineInfo={analysisData.onlineInfo}
+              />
 
               {/* Improvement Suggestions */}
               <ImprovementSuggestions suggestions={analysisData.suggestions} />

@@ -53,6 +53,10 @@ class ResumeAnalysis(Document):
     # Improvement suggestions
     improvement_suggestions: List[ImprovementSuggestion] = []
     
+    # Online presence data (from Google Search integration)
+    professional_links: Optional[List[str]] = None
+    online_info: Optional[str] = None
+    
     # Raw AI response (optional - for debugging/future reference)
     raw_analysis: Optional[str] = None
     

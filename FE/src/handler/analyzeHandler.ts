@@ -24,6 +24,8 @@ export interface AnalysisResponse {
       fix: string;
       priority: "high" | "medium" | "low";
     }[];
+    professional_links?: string[];
+    online_info?: string;
   };
 }
 
@@ -77,6 +79,8 @@ export interface DetailedAnalysisResponse {
       suggestion: string;
       priority: string;
     }[];
+    professional_links?: string[];
+    online_info?: string;
     analyzed_at: string;
   };
 }

@@ -1,9 +1,11 @@
 import os
 from typing import Dict, List, Optional
 from google import genai
+from google.genai import types
 from pathlib import Path
 from fastapi import HTTPException, status
 import json
+import re
 from app.database.models.resume_analysis import (
     ResumeAnalysis, 
     AnalysisScores, 
@@ -22,17 +24,120 @@ if not GEMINI_API_KEY:
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 class ResumeAnalyzerService:
-    """Service for analyzing resumes using Google Gemini AI"""
+    """Service for analyzing resumes using Google Gemini AI with Google Search integration"""
     
     def __init__(self):
         # Store client reference
         self.client = client
     
-    def create_analysis_prompt(self, job_title: Optional[str] = None, job_description: Optional[str] = None) -> str:
+    async def extract_professional_links(self, file_path: str) -> List[str]:
+        """Extract professional links (GitHub, LinkedIn, portfolio) from resume using Gemini"""
+        try:
+            logger.info("Extracting professional links from resume...")
+            uploaded_file = self.client.files.upload(file=file_path)
+            
+            prompt = """Extract all professional links from this resume. Look for:
+- GitHub profiles
+- LinkedIn profiles  
+- Personal websites/portfolios
+- Professional social media
+- Project links
+- Publication links
+
+Return ONLY a JSON array of URLs, like: ["url1", "url2", "url3"]
+If no links found, return an empty array: []
+"""
+            
+            response = self.client.models.generate_content(
+                model='gemini-2.0-flash-exp',
+                contents=[prompt, uploaded_file]
+            )
+            
+            # Delete the uploaded file
+            try:
+                self.client.files.delete(name=uploaded_file.name)
+            except:
+                pass
+            
+            result_text = response.text.strip()
+            
+            # Clean up markdown
+            if result_text.startswith("```json"):
+                result_text = result_text[7:]
+            if result_text.startswith("```"):
+                result_text = result_text[3:]
+            if result_text.endswith("```"):
+                result_text = result_text[:-3]
+            result_text = result_text.strip()
+            
+            links = json.loads(result_text)
+            
+            # Filter for professional sites only
+            professional_domains = ['github.com', 'linkedin.com', 'gitlab.com', 'bitbucket.org', 
+                                   'stackoverflow.com', 'dev.to', 'medium.com']
+            filtered_links = [
+                link for link in links 
+                if any(domain in link.lower() for domain in professional_domains) or 
+                re.match(r'https?://[\w\-\.]+\.(io|dev|tech|me|com|net|org)', link.lower())
+            ]
+            
+            logger.info(f"Extracted {len(filtered_links)} professional links")
+            return filtered_links[:5]  # Limit to top 5 links
+            
+        except Exception as e:
+            logger.warning(f"Failed to extract links: {str(e)}")
+            return []
+    
+    async def search_candidate_online(self, links: List[str], candidate_name: str = "") -> str:
+        """Use Google Search to gather additional information about the candidate"""
+        if not links and not candidate_name:
+            return ""
+        
+        try:
+            logger.info(f"Searching online for candidate information...")
+            
+            search_query = f"Analyze and summarize the professional profiles and projects: {' '.join(links)}"
+            if candidate_name:
+                search_query += f" for {candidate_name}"
+            
+            response = self.client.models.generate_content(
+                model='gemini-2.0-flash-exp',
+                contents=search_query,
+                config=types.GenerateContentConfig(
+                    tools=[types.Tool(google_search=types.GoogleSearch())]
+                )
+            )
+            
+            online_info = response.text.strip()
+            logger.info(f"Found online information: {len(online_info)} characters")
+            return online_info
+            
+        except Exception as e:
+            logger.warning(f"Failed to search online: {str(e)}")
+            return ""
+    
+    def create_analysis_prompt(
+        self, 
+        job_title: Optional[str] = None, 
+        job_description: Optional[str] = None,
+        online_info: Optional[str] = None,
+        professional_links: Optional[List[str]] = None
+    ) -> str:
         """Create a detailed prompt for Gemini to analyze the resume"""
         
         # Base prompt
         prompt = "You are an expert resume analyzer and career coach. Analyze the provided resume file and provide a comprehensive evaluation.\n\n"
+        
+        # Add online information if available
+        if online_info:
+            prompt += "**ADDITIONAL ONLINE INFORMATION FOUND:**\n"
+            prompt += f"{online_info}\n\n"
+            prompt += "**IMPORTANT**: Compare the resume content with the online information. "
+            prompt += "Identify any skills, projects, or achievements found online but NOT mentioned in the resume. "
+            prompt += "Suggest adding these to strengthen the resume.\n\n"
+        
+        if professional_links:
+            prompt += f"**PROFESSIONAL LINKS FOUND**: {', '.join(professional_links)}\n\n"
         
         # Add job-specific context if provided
         if job_title or job_description:
@@ -106,15 +211,26 @@ Please provide:
         if job_description:
             prompt += "\n  - Point out missing skills or experiences from job requirements"
         
+        if online_info:
+            prompt += "\n  - Mention any impressive achievements found online but missing from resume"
+        
         prompt += """
 - At least 5 specific, actionable suggestions with priority levels"""
         
         if job_description:
             prompt += "\n  - Prioritize suggestions that improve job description alignment"
         
+        if online_info:
+            prompt += "\n  - Suggest adding notable online achievements to the resume"
+        
         prompt += """
 - Be specific and provide actionable feedback
-- Focus on content, formatting, ATS compatibility, and impact
+- Focus on content, formatting, ATS compatibility, and impact"""
+        
+        if online_info:
+            prompt += "\n- Highlight any discrepancies between resume and online presence"
+        
+        prompt += """
 
 Return ONLY the JSON object, no additional text or markdown formatting.
 """
@@ -164,10 +280,24 @@ Return ONLY the JSON object, no additional text or markdown formatting.
             uploaded_file = self.client.files.upload(file=file_path)
             logger.info(f"File uploaded successfully to Gemini")
             
-            # 3. Create analysis prompt with job context
-            prompt = self.create_analysis_prompt(job_title, job_description)
+            # 3. Extract professional links from resume
+            logger.info("Extracting professional links from resume...")
+            professional_links = await self.extract_professional_links(file_path)
             
-            # 4. Send to Gemini for analysis with the uploaded file
+            # 4. Search for additional information online if links found
+            online_info = None
+            if professional_links:
+                logger.info(f"Found {len(professional_links)} professional links, searching online...")
+                # Try to extract candidate name from filename or use a generic search
+                candidate_name = file_name.replace('.pdf', '').replace('.docx', '').replace('.doc', '').replace('_', ' ')
+                online_info = await self.search_candidate_online(professional_links, candidate_name)
+            else:
+                logger.info("No professional links found in resume")
+            
+            # 5. Create analysis prompt with job context and online information
+            prompt = self.create_analysis_prompt(job_title, job_description, online_info, professional_links)
+            
+            # 6. Send to Gemini for analysis with the uploaded file
             logger.info("Sending file to Gemini for analysis...")
             response = self.client.models.generate_content(
                 model='gemini-2.0-flash-exp',
@@ -177,7 +307,7 @@ Return ONLY the JSON object, no additional text or markdown formatting.
                 ]
             )
             
-            # 5. Parse the response
+            # 7. Parse the response
             result_text = response.text.strip()
             logger.info("Received response from Gemini")
             
@@ -191,10 +321,10 @@ Return ONLY the JSON object, no additional text or markdown formatting.
             
             result_text = result_text.strip()
             
-            # 6. Parse JSON response
+            # 8. Parse JSON response
             analysis_result = json.loads(result_text)
             
-            # 7. Validate the structure
+            # 9. Validate the structure
             required_keys = ["score", "ats_score", "readability_score", "keyword_match", 
                            "strengths", "weaknesses", "suggestions"]
             
@@ -202,7 +332,7 @@ Return ONLY the JSON object, no additional text or markdown formatting.
                 if key not in analysis_result:
                     raise ValueError(f"Missing required key: {key}")
             
-            # 8. Save to database
+            # 10. Save to database
             await self._save_to_database(
                 user_id=user_id,
                 file_name=file_name,
@@ -211,8 +341,14 @@ Return ONLY the JSON object, no additional text or markdown formatting.
                 job_title=job_title,
                 job_description=job_description,
                 analysis_result=analysis_result,
-                raw_response=result_text
+                raw_response=result_text,
+                professional_links=professional_links,
+                online_info=online_info
             )
+            
+            # Add links and online info to response
+            analysis_result["professional_links"] = professional_links or []
+            analysis_result["online_info"] = online_info or None
             
             return analysis_result
             
@@ -249,7 +385,9 @@ Return ONLY the JSON object, no additional text or markdown formatting.
         job_title: Optional[str],
         job_description: Optional[str],
         analysis_result: Dict,
-        raw_response: str
+        raw_response: str,
+        professional_links: Optional[List[str]] = None,
+        online_info: Optional[str] = None
     ) -> None:
         """
         Save analysis results to MongoDB
@@ -303,6 +441,8 @@ Return ONLY the JSON object, no additional text or markdown formatting.
                 strengths=analysis_result.get("strengths", []),
                 weaknesses=analysis_result.get("weaknesses", []),
                 improvement_suggestions=suggestions,
+                professional_links=professional_links,
+                online_info=online_info,
                 raw_analysis=raw_response
             )
             
