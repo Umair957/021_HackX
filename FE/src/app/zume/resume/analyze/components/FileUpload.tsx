@@ -1,13 +1,17 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { Upload, FileText, X, AlertCircle } from "lucide-react";
+import { Upload, FileText, X, AlertCircle, Briefcase, FileSearch } from "lucide-react";
 
 interface FileUploadProps {
   onFileUpload: (file: File) => void;
+  jobTitle: string;
+  setJobTitle: (title: string) => void;
+  jobDescription: string;
+  setJobDescription: (description: string) => void;
 }
 
-export function FileUpload({ onFileUpload }: FileUploadProps) {
+export function FileUpload({ onFileUpload, jobTitle, setJobTitle, jobDescription, setJobDescription }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string>("");
@@ -86,6 +90,51 @@ export function FileUpload({ onFileUpload }: FileUploadProps) {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
+      {/* Job Details Section */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Briefcase className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Target Job Details (Optional)
+          </h3>
+        </div>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          Provide job details for more accurate, role-specific analysis
+        </p>
+
+        {/* Job Title Input */}
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <FileSearch className="w-4 h-4" />
+            Job Title
+          </label>
+          <input
+            type="text"
+            value={jobTitle}
+            onChange={(e) => setJobTitle(e.target.value)}
+            placeholder="e.g., Senior Software Engineer, Data Scientist"
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-all"
+          />
+        </div>
+
+        {/* Job Description Textarea */}
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            Job Description
+          </label>
+          <textarea
+            value={jobDescription}
+            onChange={(e) => setJobDescription(e.target.value)}
+            placeholder="Paste the job description here... Include key requirements, responsibilities, and qualifications."
+            rows={6}
+            className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-all resize-none"
+          />
+          <p className="text-xs text-slate-400">
+            Adding a job description helps AI analyze your resume against specific role requirements
+          </p>
+        </div>
+      </div>
+
       {/* Upload Area */}
       <div
         onDragOver={handleDragOver}

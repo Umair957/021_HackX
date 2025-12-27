@@ -9,6 +9,7 @@ import { ToastType } from "@/constants/toastData";
 import { FileUpload } from "./components/FileUpload";
 import { AnalysisResults } from "./components/AnalysisResults";
 import { ImprovementSuggestions } from "./components/ImprovementSuggestions";
+import { analyzeResumeHandler } from "@/handler/analyzeHandler";
 
 interface AnalysisData {
   score: number;
@@ -33,6 +34,8 @@ export default function AnalyzeResumePage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [jobTitle, setJobTitle] = useState<string>("");
+  const [jobDescription, setJobDescription] = useState<string>("");
 
   // --- TOAST STATE ---
   const [toast, setToast] = useState<{
@@ -59,64 +62,32 @@ export default function AnalyzeResumePage() {
     setIsAnalyzing(true);
 
     try {
-      // TODO: Replace with actual API call
-      // Simulating API call
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      console.log("Uploading resume for analysis:", file.name);
 
-      // Mock analysis data
-      const mockAnalysis: AnalysisData = {
-        score: 78,
-        atsScore: 82,
-        readabilityScore: 75,
-        keywordMatch: 70,
-        strengths: [
-          "Clear and concise work experience descriptions",
-          "Good use of action verbs and quantifiable achievements",
-          "Well-structured education section",
-          "Relevant technical skills listed",
-        ],
-        weaknesses: [
-          "Missing contact information (LinkedIn, portfolio)",
-          "No summary or objective statement",
-          "Limited use of industry-specific keywords",
-          "Education section could include more details",
-        ],
-        suggestions: [
-          {
-            category: "Contact Information",
-            issue: "Missing LinkedIn profile URL",
-            fix: "Add your LinkedIn profile to increase credibility",
-            priority: "high",
-          },
-          {
-            category: "Summary",
-            issue: "No professional summary",
-            fix: "Add a 2-3 sentence summary highlighting your expertise",
-            priority: "high",
-          },
-          {
-            category: "Keywords",
-            issue: "Low keyword density for target role",
-            fix: "Include more industry-specific technical terms",
-            priority: "medium",
-          },
-          {
-            category: "Formatting",
-            issue: "Inconsistent date formatting",
-            fix: "Use consistent date format throughout (e.g., MM/YYYY)",
-            priority: "medium",
-          },
-          {
-            category: "Skills",
-            issue: "Skills section could be more detailed",
-            fix: "Group skills by category (Languages, Frameworks, Tools)",
-            priority: "low",
-          },
-        ],
-      };
+      // Call the API handler with job data
+      const response = await analyzeResumeHandler(file, jobTitle, jobDescription);
 
-      setAnalysisData(mockAnalysis);
-      showToast("success", "Analysis Complete", "Your resume has been analyzed successfully!");
+      // Check the status returned by our handler
+      if (response.status === 200 && response.data) {
+        const apiAnalysis = response.data.analysis;
+        
+        // Transform API response to match our component interface
+        const transformedAnalysis: AnalysisData = {
+          score: apiAnalysis?.score || 0,
+          atsScore: apiAnalysis?.ats_score || 0,
+          readabilityScore: apiAnalysis?.readability_score || 0,
+          keywordMatch: apiAnalysis?.keyword_match || 0,
+          strengths: apiAnalysis?.strengths || [],
+          weaknesses: apiAnalysis?.weaknesses || [],
+          suggestions: apiAnalysis?.suggestions || [],
+        };
+
+        setAnalysisData(transformedAnalysis);
+        showToast("success", "Analysis Complete", "Your resume has been analyzed successfully!");
+      } else {
+        // API ERROR
+        throw new Error(response.message || "Unknown error occurred");
+      }
     } catch (error: any) {
       console.error("Analysis failed:", error);
       showToast("error", "Analysis Failed", error.message || "Could not analyze your resume. Please try again.");
@@ -205,7 +176,13 @@ export default function AnalyzeResumePage() {
           
           {!uploadedFile && !analysisData && (
             <div className="p-8 md:p-16">
-              <FileUpload onFileUpload={handleFileUpload} />
+              <FileUpload 
+                onFileUpload={handleFileUpload}
+                jobTitle={jobTitle}
+                setJobTitle={setJobTitle}
+                jobDescription={jobDescription}
+                setJobDescription={setJobDescription}
+              />
             </div>
           )}
 

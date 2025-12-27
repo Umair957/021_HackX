@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     if (accessToken) {
       const cookieStore = await cookies();
       
+      // Set httpOnly cookie for security
       cookieStore.set({
         name: '__ZUME__',
         value: accessToken,
@@ -36,10 +37,12 @@ export async function POST(request: NextRequest) {
         maxAge: 60 * 60 * 24 * 7 // 7 days
       });
 
+      // Return user data without token (token is in httpOnly cookie)
       return NextResponse.json({ 
         message: "Login successful", 
         user: {
-          user_name: data.user_name, role: data.role
+          user_name: data.user_name, 
+          role: data.role
         }
       }, { status: 200 });
     }
@@ -47,7 +50,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No token returned from backend" }, { status: 500 });
 
   } catch (error: any) {
-    console.error("Login Route Error:", error);
+    // Don't log the full error in production
+    if (process.env.NODE_ENV === 'development') {
+      console.error("Login Route Error:", error.message);
+    }
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

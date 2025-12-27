@@ -1,25 +1,60 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.database.connection import connect
 from app.router.auth import router as auth_router
 from app.router.resume_create import router as resume_router
+from app.router.resume_analyze import router as analyze_router
+from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
+from app.utils.logger import get_logger
 import signal
 import sys
+
+logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- STARTUP ---
+    logger.info("Starting application...")
     await connect.init_db()  # Connects to Mongo & Initializes Beanie
+    logger.info("Database initialized successfully")
 
     yield  # The application runs here
 
     # --- SHUTDOWN ---
+    logger.info("Shutting down application...")
     await connect.close_db() # Cleans up connection
 
 # Pass the lifespan to the app
-app = FastAPI(title="ZUME API", lifespan=lifespan)
+app = FastAPI(
+    title="ZUME API",
+    lifespan=lifespan,
+    docs_url="/api/docs",  # Move docs to /api/docs for better security
+    redoc_url="/api/redoc"
+)
+
+# Add security middlewares
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    RateLimitMiddleware,
+    max_requests=100,  # 100 requests per window
+    window_seconds=60   # 60 seconds window
+)
+
+# CORS configuration (adjust origins as needed for production)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://192.168.1.14:3000"],  # Add your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"]
+)
+
+# Include routers
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["AUTH"])
 app.include_router(resume_router, prefix="/api/v1/resume", tags=["RESUME"])
+app.include_router(analyze_router, prefix="/api/v1/resume", tags=["RESUME_ANALYSIS"])
 
 
 @app.get("/")

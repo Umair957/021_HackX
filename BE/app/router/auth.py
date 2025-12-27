@@ -3,14 +3,16 @@ from app.database.models import user
 from app.services.auth_service import AuthService
 from app.schema import auth
 from pydantic import EmailStr
+from app.utils.logger import get_logger
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(payload: user.User):
     
-    print("Registering user with email:", payload.email)
+    logger.info("User registration initiated")
     try:
         await AuthService.create_user(
             first_name=payload.first_name,
@@ -70,6 +72,7 @@ async def login_user(
     
     user_data, token = await AuthService.authenticate_user(email=credentials.email, password=credentials.password)
     
+    # Return token only, user data without sensitive info
     return {
         "access_token": token,
         "token_type": "bearer",
