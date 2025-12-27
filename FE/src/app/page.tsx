@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import Navbar from "@/components/Navbar"; 
+import Navbar from "@/components//Navbar"; 
 
 // Keep your existing landing page components
 import HeroSection from "@/components/Hero";

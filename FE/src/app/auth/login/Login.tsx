@@ -9,6 +9,11 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { loginHandler } from "@/handler/authHandler";
+
+// 1. IMPORT THE SIDE TOAST & TYPES
+import SideToast from "@/ui/Toast";
+import { ToastType } from "@/constants/toastData";
 
 export default function LoginPage() {
   // --- STATE MANAGEMENT ---
@@ -21,8 +26,20 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false); // API Loading
   const [isUnlocked, setIsUnlocked] = useState(false); // Password correct (unblur)
   const [isRedirecting, setIsRedirecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  // --- TOAST STATE ---
+  const [toast, setToast] = useState<{ visible: boolean; type: ToastType; title: string; desc: string }>({
+    visible: false,
+    type: "success",
+    title: "",
+    desc: "",
+  });
+
+  // Helper to trigger toasts easily
+  const showToast = (type: ToastType, title: string, desc: string) => {
+    setToast({ visible: true, type, title, desc });
+  };
 
   // --- HANDLERS ---
 
@@ -48,29 +65,38 @@ export default function LoginPage() {
   // Handle Login (The "Unlock" Logic)
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    if (!email || !password) return setError("Email and password are required");
+    
+    // VALIDATION: Check for empty fields
+    if (!email || !password) {
+        showToast("warning", "Missing Credentials", "Please enter both your email and password.");
+        return;
+    }
 
     setIsLoading(true);
     try {
       const payload = { email: email.trim(), password };
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok) {
+
+      const result = await loginHandler(payload);
+      const status = result?.status;
+
+      if (status && status >= 200 && status < 300) {
         setIsUnlocked(true);
-        // redirect after a short delay to show success
+        showToast("success", "Login Successful", "Welcome back! Redirecting to dashboard...");
+
         setTimeout(() => {
-          router.push('/zume/dashboard');
+          setIsRedirecting(true);
+          setTimeout(() => {
+            router.push('/zume');
+          }, 800);
         }, 800);
       } else {
-        setError(data?.message || data?.error || 'Invalid credentials');
+        const msg = result?.refinedResponse?.message || result?.message || "Invalid credentials";
+        showToast("error", "Access Denied", msg as string);
       }
-    } catch (err : Eror) {
-      setError(err?.message || 'Network error');
+    } catch (err) {
+      const errMsg = (err as Error).message || "Could not connect to the server.";
+      // TRIGGER NETWORK ERROR TOAST
+      showToast("error", "Network Error", errMsg);
     } finally {
       setIsLoading(false);
     }
@@ -79,6 +105,15 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 flex items-center justify-center p-4 md:p-8 font-sans relative overflow-hidden">
       
+      {/* --- RENDER THE SIDE TOAST COMPONENT --- */}
+      <SideToast 
+        isVisible={toast.visible}
+        type={toast.type}
+        title={toast.title}
+        description={toast.desc}
+        onClose={() => setToast({ ...toast, visible: false })}
+      />
+
       {/* Background Ambient Glows */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-emerald-500/5 dark:bg-emerald-900/10 rounded-full blur-[120px]"></div>
@@ -222,11 +257,6 @@ export default function LoginPage() {
         <div className="relative h-[500px] md:h-[600px] lg:h-[800px] flex items-center justify-center order-1 lg:order-2 perspective-1000">
           
           <div className="relative w-full h-full flex items-center justify-center">
-            
-            {/* 
-                THE STACK LOGIC:
-                Background cards animate/wiggle when "isTyping" is true to simulate shuffling.
-            */}
             
             {/* Resume 1 (Bottom) */}
             <motion.div 
