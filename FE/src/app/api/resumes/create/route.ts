@@ -32,12 +32,12 @@ export async function POST(request: NextRequest) {
     // 4. Add user_id to the body
     body.user_id = userId;
 
-    // 5. Send Data to Backend API (FastAPI) with query params
-    const res = await fetch(`${apiUrl}/api/v1/resume/resume-create/?self=${userId}&token=${accessToken}`, {
+    // 5. Send Data to Backend API (FastAPI)
+    const res = await fetch(`${apiUrl}/api/v1/resume/resume-create/`, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${accessToken}` // ✅ Attach Token for Auth
+        "Authorization": `Bearer ${accessToken}`
       },
       body: JSON.stringify(body),
     });

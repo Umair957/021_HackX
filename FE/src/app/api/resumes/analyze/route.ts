@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 7. Send file to Backend API (FastAPI)
-    const res = await fetch(`${apiUrl}/api/v1/resume/analyze?self=${userId}&token=${accessToken}`, {
+    const res = await fetch(`${apiUrl}/api/v1/resume/analyze`, {
       method: "POST",
       headers: { 
         "Authorization": `Bearer ${accessToken}`

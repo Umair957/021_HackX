@@ -27,6 +27,60 @@ export interface AnalysisResponse {
   };
 }
 
+export interface AnalysisHistoryItem {
+  id: string;
+  file_name: string;
+  file_size: number;
+  job_title: string | null;
+  has_job_description: boolean;
+  scores: {
+    overall: number;
+    ats: number;
+    formatting: number;
+    keywords: number;
+  };
+  analyzed_at: string;
+}
+
+export interface AnalysisHistoryResponse {
+  status: string;
+  total: number;
+  limit: number;
+  skip: number;
+  analyses: AnalysisHistoryItem[];
+}
+
+export interface DetailedAnalysisResponse {
+  status: string;
+  analysis: {
+    id: string;
+    file_info: {
+      name: string;
+      size: number;
+      type: string;
+    };
+    job_context: {
+      job_title: string | null;
+      job_description: string | null;
+    };
+    scores: {
+      overall_score: number;
+      ats_score: number;
+      formatting_score: number;
+      content_quality_score: number;
+      keyword_optimization_score: number;
+    };
+    strengths: string[];
+    weaknesses: string[];
+    improvement_suggestions: {
+      category: string;
+      suggestion: string;
+      priority: string;
+    }[];
+    analyzed_at: string;
+  };
+}
+
 export const analyzeResumeHandler = async (file: File, jobTitle?: string, jobDescription?: string) => {
   try {
     // Create FormData to send file
@@ -77,5 +131,27 @@ export const analyzeResumeHandler = async (file: File, jobTitle?: string, jobDes
       status: status,
       data: null
     };
+  }
+};
+
+export const getAnalysisHistoryHandler = async (limit: number = 10, skip: number = 0): Promise<AnalysisHistoryResponse> => {
+  try {
+    const response = await axios.get<AnalysisHistoryResponse>("/api/resumes/history", {
+      params: { limit, skip },
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error("Error fetching analysis history:", error);
+    throw error;
+  }
+};
+
+export const getAnalysisDetailHandler = async (analysisId: string): Promise<DetailedAnalysisResponse> => {
+  try {
+    const response = await axios.get<DetailedAnalysisResponse>(`/api/resumes/history/${analysisId}`);
+    return response.data;
+  } catch (error: any) {
+    console.error("Error fetching analysis detail:", error);
+    throw error;
   }
 };

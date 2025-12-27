@@ -1,128 +1,630 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   FileText, Plus, ArrowRight, TrendingUp, 
-  Calendar, CheckCircle2, ChevronRight 
+  Calendar, CheckCircle2, ChevronRight, Loader2,
+  FileSearch, BarChart3, Clock, AlertCircle, Target,
+  Award, Zap, Eye, Star, Download
 } from "lucide-react";
-
-// --- MOCK DATA ---
-const candidateHistory = [
-  { id: 1, name: "Senior_Product_Designer.pdf", role: "Product Designer", date: "2 hours ago", score: 92 },
-  { id: 2, name: "Frontend_Dev_React_v2.pdf", role: "Frontend Developer", date: "1 day ago", score: 78 },
-];
-
-const latestAnalysis = {
-  score: 92,
-  summary: "Excellent work! Your resume is well-tailored for ATS.",
-  breakdown: [
-    { label: "Impact", score: 95, color: "bg-emerald-500" },
-    { label: "Brevity", score: 88, color: "bg-emerald-400" },
-    { label: "Keywords", score: 92, color: "bg-emerald-500" },
-  ]
-};
+import { getAnalysisHistoryHandler, type AnalysisHistoryItem } from "@/handler/analyzeHandler";
+import { useRouter } from "next/navigation";
 
 export default function CandidateDashboard() {
+  const router = useRouter();
+  const [analyses, setAnalyses] = useState<AnalysisHistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+
+  useEffect(() => {
+    fetchAnalysisHistory();
+  }, []);
+
+  const fetchAnalysisHistory = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await getAnalysisHistoryHandler(5, 0);
+      setAnalyses(response.analyses);
+      setTotalCount(response.total);
+    } catch (err: any) {
+      console.error("Failed to fetch analysis history:", err);
+      setError("Failed to load your resume history");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 90) return "text-emerald-600 dark:text-emerald-400";
+    if (score >= 75) return "text-blue-600 dark:text-blue-400";
+    if (score >= 60) return "text-amber-600 dark:text-amber-400";
+    return "text-red-600 dark:text-red-400";
+  };
+
+  const getScoreBadgeColor = (score: number) => {
+    if (score >= 90) return "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400";
+    if (score >= 75) return "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400";
+    if (score >= 60) return "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400";
+    return "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400";
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) return `${diffMins} mins ago`;
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const stats = {
+    totalAnalyses: totalCount,
+    avgScore: analyses.length > 0 
+      ? Math.round(analyses.reduce((sum, a) => sum + a.scores.overall, 0) / analyses.length)
+      : 0,
+    avgATS: analyses.length > 0
+      ? Math.round(analyses.reduce((sum, a) => sum + a.scores.ats, 0) / analyses.length)
+      : 0,
+    highScores: analyses.filter(a => a.scores.overall >= 85).length,
+    needsWork: analyses.filter(a => a.scores.overall < 70).length,
+    jobTargeted: analyses.filter(a => a.has_job_description).length
+  };
+
+  const improvementTrend = analyses.length >= 2 
+    ? analyses[0].scores.overall - analyses[1].scores.overall 
+    : 0;
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 font-sans">
+    <div className="space-y-6 animate-in fade-in duration-500 font-sans">
       
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">My Resumes</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Manage your documents and view analysis reports.</p>
-        </div>
-        <button className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
-          <Plus className="w-4 h-4" /> Create New
-        </button>
+      {/* Header with Welcome */}
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-white">
+          Welcome back, Candidate! 👋
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400">
+          Here is what is happening with your job applications today.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      {/* Primary Stats - Hero Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCardNew 
+          title="Active Applications" 
+          value="12" 
+          icon={Target} 
+          trend="+3"
+          trendUp={true}
+          color="blue"
+        />
+        <StatCardNew 
+          title="Profile Views" 
+          value="48" 
+          icon={Eye} 
+          trend="+12"
+          trendUp={true}
+          color="purple"
+        />
+        <StatCardNew 
+          title="Interviews" 
+          value="3" 
+          icon={Calendar} 
+          trend="+1"
+          trendUp={true}
+          color="emerald"
+        />
+        <StatCardNew 
+          title="Response Rate" 
+          value="24%" 
+          icon={TrendingUp} 
+          trend="+5%"
+          trendUp={true}
+          color="amber"
+        />
+      </div>
+
+      {/* Resume Performance Section */}
+      {!loading && !error && analyses.length > 0 && (
+        <div className="bg-gradient-to-br from-emerald-50 via-blue-50 to-purple-50 dark:from-emerald-900/10 dark:via-blue-900/10 dark:to-purple-900/10 rounded-3xl p-6 md:p-8 border border-emerald-100 dark:border-emerald-800">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-1">Resume Performance</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Your latest resume metrics</p>
+            </div>
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${improvementTrend > 0 ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
+              <TrendingUp className={`w-4 h-4 ${improvementTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500'}`} />
+              <span className={`text-sm font-bold ${improvementTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                {improvementTrend > 0 ? '+' : ''}{improvementTrend} pts
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <MetricCard 
+              label="Average Score" 
+              value={stats.avgScore} 
+              max={100}
+              icon={Award}
+              color="emerald"
+            />
+            <MetricCard 
+              label="ATS Compatibility" 
+              value={stats.avgATS} 
+              max={100}
+              icon={CheckCircle2}
+              color="blue"
+            />
+            <MetricCard 
+              label="Total Analyzed" 
+              value={stats.totalAnalyses} 
+              max={null}
+              icon={FileText}
+              color="purple"
+              suffix=" resumes"
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
         {/* Left: Resume List */}
-        <div className="xl:col-span-2 space-y-6">
-           <div className="flex flex-col gap-4">
-              {candidateHistory.map(resume => (
+        <div className="xl:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+              <FileSearch className="w-5 h-5" />
+              Recent Resume Analyses
+            </h2>
+            {totalCount > 5 && (
+              <button 
+                onClick={() => router.push('/zume/resume/analyze/history')}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-semibold flex items-center gap-1"
+              >
+                View all ({totalCount}) <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800">
+              <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-3" />
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading your resumes...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-gray-900 rounded-2xl border border-red-100 dark:border-red-900">
+              <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Failed to Load</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4 max-w-sm">{error}</p>
+              <button 
+                onClick={fetchAnalysisHistory}
+                className="px-5 py-2.5 text-sm bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          ) : analyses.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-blue-900/20 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-800">
+              <div className="w-20 h-20 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                <FileSearch className="w-10 h-10 text-blue-500" />
+              </div>
+              <h3 className="text-xl font-black text-gray-900 dark:text-white mb-2">Start Your Journey</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md">
+                Analyze your resume to get AI-powered insights and improve your chances of landing interviews.
+              </p>
+              <button 
+                onClick={() => router.push('/zume/resume/analyze')}
+                className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-lg hover:shadow-xl"
+              >
+                <Zap className="w-5 h-5" /> Analyze Your First Resume
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {analyses.map((analysis, index) => (
                 <motion.div 
-                  key={resume.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="group flex flex-col sm:flex-row items-start sm:items-center gap-4 p-5 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl hover:border-emerald-500/30 hover:shadow-md transition-all cursor-pointer relative overflow-hidden"
+                  key={analysis.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05, type: "spring", stiffness: 100 }}
+                  className="group relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg transition-all cursor-pointer overflow-hidden"
+                  onClick={() => router.push(`/zume/resume/analyze/history/${analysis.id}`)}
                 >
-                  <div className={`absolute left-0 top-0 bottom-0 w-1 ${resume.score >= 90 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+                  {/* Score Badge - Left indicator */}
+                  <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
+                    analysis.scores.overall >= 90 ? 'bg-gradient-to-b from-emerald-500 to-emerald-600' : 
+                    analysis.scores.overall >= 75 ? 'bg-gradient-to-b from-blue-500 to-blue-600' : 
+                    analysis.scores.overall >= 60 ? 'bg-gradient-to-b from-amber-500 to-amber-600' :
+                    'bg-gradient-to-b from-red-500 to-red-600'
+                  }`}></div>
                   
-                  <div className="w-12 h-12 rounded-xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-400 group-hover:text-emerald-600 transition-colors shrink-0">
-                    <FileText className="w-6 h-6" />
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-bold text-gray-900 dark:text-white truncate text-base">{resume.name}</h4>
-                      {resume.score >= 90 && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                  <div className="p-4 pl-6">
+                    <div className="flex items-start justify-between gap-4">
+                      {/* File Info */}
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform shrink-0">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <h4 className="font-bold text-gray-900 dark:text-white truncate text-sm">
+                              {analysis.file_name}
+                            </h4>
+                            {analysis.scores.overall >= 85 && (
+                              <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-full shrink-0">
+                                <Star className="w-3 h-3 text-emerald-600 dark:text-emerald-400 fill-current" />
+                                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Top</span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> {formatDate(analysis.analyzed_at)}
+                            </span>
+                            {analysis.job_title && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-700"></span>
+                                <span className="truncate max-w-[180px] font-medium text-gray-700 dark:text-gray-300">
+                                  {analysis.job_title}
+                                </span>
+                              </>
+                            )}
+                            {analysis.has_job_description && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-700"></span>
+                                <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium">
+                                  <Target className="w-3 h-3" /> Targeted
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Mini Score Breakdown */}
+                          <div className="flex items-center gap-3 mt-2">
+                            <ScorePill label="ATS" score={analysis.scores.ats} />
+                            <ScorePill label="Format" score={analysis.scores.formatting} />
+                            <ScorePill label="Keywords" score={analysis.scores.keywords} />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Overall Score */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-right">
+                          <span className="text-[9px] font-bold uppercase text-gray-400 tracking-wider block mb-0.5">Overall</span>
+                          <div className={`text-3xl font-black leading-none ${getScoreColor(analysis.scores.overall)}`}>
+                            {analysis.scores.overall}
+                          </div>
+                        </div>
+                        
+                        <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {resume.date}</span>
-                      <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-700"></span>
-                      <span>{resume.role}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end mt-4 sm:mt-0">
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Score</span>
-                      <div className={`text-2xl font-black ${resume.score >= 90 ? 'text-emerald-600' : 'text-amber-500'}`}>{resume.score}</div>
-                    </div>
-                    
-                    <button className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-bold rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-2">
-                      Report <ArrowRight className="w-3 h-3" />
-                    </button>
                   </div>
                 </motion.div>
               ))}
-           </div>
+            </div>
+          )}
            
-           <button className="w-full py-4 text-sm font-bold text-gray-400 hover:text-gray-600 flex items-center justify-center gap-1 transition-colors">
-              Load older resumes <ChevronRight className="w-4 h-4" />
-           </button>
+          {!loading && !error && analyses.length > 0 && totalCount > 5 && (
+            <button 
+              onClick={() => router.push('/zume/resume/analyze/history')}
+              className="w-full py-3 text-sm font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center justify-center gap-1 transition-colors bg-blue-50 dark:bg-blue-900/20 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30"
+            >
+              Load more analyses ({totalCount - 5} remaining) <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        {/* Right: Analysis Snapshot */}
-        <div className="space-y-6">
-           <div>
-             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-6 px-1">Latest Analysis</h2>
-             <div className="bg-white dark:bg-gray-900 rounded-3xl p-6 border border-gray-100 dark:border-gray-800 shadow-xl shadow-emerald-500/5 relative overflow-hidden group">
+        {/* Right: Sidebar */}
+        <div className="space-y-4">
+          {/* Latest Analysis Card */}
+          {analyses.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 px-1">Latest Analysis</h2>
+              <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
                 
-                <div className="flex justify-between items-start mb-6">
-                   <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/20 rounded-2xl flex items-center justify-center text-emerald-600 mb-2">
-                      <TrendingUp className="w-6 h-6" />
-                   </div>
-                   <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-xs font-bold rounded-full">+5% vs last</span>
+                {/* Background Pattern */}
+                <div className="absolute inset-0 opacity-10">
+                  <div className="absolute top-0 right-0 w-40 h-40 bg-white rounded-full blur-3xl"></div>
+                  <div className="absolute bottom-0 left-0 w-32 h-32 bg-white rounded-full blur-2xl"></div>
                 </div>
 
-                <h3 className="text-3xl font-black text-gray-900 dark:text-white mb-4">{latestAnalysis.score}/100</h3>
-                
-                <div className="space-y-3 mb-6">
-                   {latestAnalysis.breakdown.map((item, i) => (
-                      <div key={i}>
-                         <div className="flex justify-between text-xs font-bold text-gray-600 dark:text-gray-300 mb-1">
-                            <span>{item.label}</span><span>{item.score}%</span>
-                         </div>
-                         <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
-                            <div className={`h-2 rounded-full ${item.color}`} style={{ width: `${item.score}%` }} />
-                         </div>
-                      </div>
-                   ))}
-                </div>
+                <div className="relative z-10">
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                      <Award className="w-6 h-6" />
+                    </div>
+                    {improvementTrend > 0 && (
+                      <span className="px-3 py-1 bg-white/20 backdrop-blur-sm text-white text-xs font-bold rounded-full flex items-center gap-1">
+                        <TrendingUp className="w-3 h-3" /> +{improvementTrend}
+                      </span>
+                    )}
+                  </div>
 
-                <button className="w-full py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold rounded-xl hover:opacity-90 transition-opacity">
-                  View Full Report
-                </button>
-             </div>
-           </div>
+                  <div className="mb-6">
+                    <p className="text-sm text-white/80 mb-2">Overall Score</p>
+                    <h3 className="text-5xl font-black mb-1">{analyses[0].scores.overall}</h3>
+                    <p className="text-sm text-white/70">{analyses[0].file_name.substring(0, 25)}...</p>
+                  </div>
+                  
+                  <div className="space-y-2.5 mb-6">
+                    <ScoreBarWhite label="ATS" score={analyses[0].scores.ats} />
+                    <ScoreBarWhite label="Formatting" score={analyses[0].scores.formatting} />
+                    <ScoreBarWhite label="Keywords" score={analyses[0].scores.keywords} />
+                  </div>
+
+                  <button 
+                    onClick={() => router.push(`/zume/resume/analyze/history/${analyses[0].id}`)}
+                    className="w-full py-3 bg-white text-blue-600 font-bold rounded-xl hover:bg-white/90 transition-all shadow-lg"
+                  >
+                    View Full Report
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Quick Actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-200 dark:border-gray-800 shadow-sm"
+          >
+            <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Quick Actions</h3>
+            <div className="space-y-2">
+              <button 
+                onClick={() => router.push('/zume/resume/analyze')}
+                className="w-full flex items-center gap-3 p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl hover:shadow-md transition-all text-left group border border-blue-100 dark:border-blue-800"
+              >
+                <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shrink-0">
+                  <FileSearch className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">Analyze Resume</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Get AI insights</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+              </button>
+              
+              <button 
+                onClick={() => router.push('/zume/resume/create')}
+                className="w-full flex items-center gap-3 p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-xl hover:shadow-md transition-all text-left group border border-emerald-100 dark:border-emerald-800"
+              >
+                <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center shrink-0">
+                  <Plus className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">Create Resume</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Build from scratch</p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all" />
+              </button>
+            </div>
+          </motion.div>
+
+          {/* Resume Stats */}
+          {analyses.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-200 dark:border-gray-800 shadow-sm"
+            >
+              <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Your Stats</h3>
+              <div className="space-y-3">
+                <StatItem icon={FileText} label="Total Resumes" value={stats.totalAnalyses.toString()} />
+                <StatItem icon={Star} label="High Scores" value={stats.highScores.toString()} />
+                <StatItem icon={Target} label="Job Targeted" value={stats.jobTargeted.toString()} />
+                <StatItem icon={AlertCircle} label="Needs Work" value={stats.needsWork.toString()} color="amber" />
+              </div>
+            </motion.div>
+          )}
         </div>
 
       </div>
+    </div>
+  );
+}
+
+// New Modern Stat Card with Trends
+function StatCardNew({ title, value, icon: Icon, trend, trendUp, color }: {
+  title: string;
+  value: string;
+  icon: React.ElementType;
+  trend?: string;
+  trendUp?: boolean;
+  color: string;
+}) {
+  const colorStyles: Record<string, { bg: string; icon: string; border: string }> = {
+    blue: { bg: "bg-blue-50 dark:bg-blue-900/20", icon: "text-blue-600 dark:text-blue-400", border: "border-blue-100 dark:border-blue-800" },
+    purple: { bg: "bg-purple-50 dark:bg-purple-900/20", icon: "text-purple-600 dark:text-purple-400", border: "border-purple-100 dark:border-purple-800" },
+    amber: { bg: "bg-amber-50 dark:bg-amber-900/20", icon: "text-amber-600 dark:text-amber-400", border: "border-amber-100 dark:border-amber-800" },
+    emerald: { bg: "bg-emerald-50 dark:bg-emerald-900/20", icon: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-100 dark:border-emerald-800" },
+  };
+
+  const style = colorStyles[color] || colorStyles.blue;
+
+  return (
+    <div className={`bg-white dark:bg-gray-900 p-5 rounded-2xl border ${style.border} hover:shadow-lg transition-all group`}>
+      <div className="flex items-start justify-between mb-3">
+        <div className={`p-2.5 rounded-xl ${style.bg} group-hover:scale-110 transition-transform`}>
+          <Icon className={`w-5 h-5 ${style.icon}`} />
+        </div>
+        {trend && (
+          <span className={`text-xs font-bold ${trendUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'} flex items-center gap-0.5`}>
+            {trend}
+          </span>
+        )}
+      </div>
+      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">{title}</p>
+      <h4 className="text-3xl font-black text-gray-900 dark:text-white">{value}</h4>
+    </div>
+  );
+}
+
+// Metric Card for Performance Section
+function MetricCard({ label, value, max, icon: Icon, color, suffix }: {
+  label: string;
+  value: number;
+  max: number | null;
+  icon: React.ElementType;
+  color: string;
+  suffix?: string;
+}) {
+  const colorStyles: Record<string, string> = {
+    emerald: "from-emerald-500 to-teal-500",
+    blue: "from-blue-500 to-indigo-500",
+    purple: "from-purple-500 to-pink-500",
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-200 dark:border-gray-800">
+      <div className="flex items-center gap-3 mb-3">
+        <div className={`p-2 rounded-lg bg-gradient-to-br ${colorStyles[color] || colorStyles.emerald}`}>
+          <Icon className="w-4 h-4 text-white" />
+        </div>
+        <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-3xl font-black text-gray-900 dark:text-white">{value}</span>
+        {max && <span className="text-lg font-bold text-gray-400">/{max}</span>}
+        {suffix && <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{suffix}</span>}
+      </div>
+      {max && (
+        <div className="mt-3 w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
+          <div 
+            className={`h-1.5 rounded-full bg-gradient-to-r ${colorStyles[color]}`}
+            style={{ width: `${(value / max) * 100}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Score Pill Component
+function ScorePill({ label, score }: { label: string; score: number }) {
+  const getColor = (score: number) => {
+    if (score >= 90) return "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400";
+    if (score >= 75) return "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400";
+    if (score >= 60) return "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400";
+    return "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400";
+  };
+
+  return (
+    <span className={`px-2 py-1 rounded-md text-[10px] font-bold ${getColor(score)}`}>
+      {label}: {score}
+    </span>
+  );
+}
+
+function StatCard({ title, value, icon: Icon, color }: {
+  title: string;
+  value: string;
+  icon: React.ElementType;
+  color: string;
+}) {
+  const colorStyles: Record<string, string> = {
+    blue: "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400",
+    purple: "bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400",
+    amber: "bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400",
+    emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400",
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{title}</p>
+          <h4 className="text-2xl font-bold text-gray-900 dark:text-white">{value}</h4>
+        </div>
+        <div className={`p-3 rounded-xl ${colorStyles[color] || colorStyles.blue}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScoreBar({ label, score }: { label: string; score: number }) {
+  const getBarColor = (score: number) => {
+    if (score >= 90) return "bg-emerald-500";
+    if (score >= 75) return "bg-blue-500";
+    if (score >= 60) return "bg-amber-500";
+    return "bg-red-500";
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between text-xs font-bold text-gray-600 dark:text-gray-300 mb-1">
+        <span>{label}</span>
+        <span>{score}%</span>
+      </div>
+      <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+        <div 
+          className={`h-2 rounded-full ${getBarColor(score)} transition-all duration-500`} 
+          style={{ width: `${score}%` }} 
+        />
+      </div>
+    </div>
+  );
+}
+
+// White version for colored backgrounds
+function ScoreBarWhite({ label, score }: { label: string; score: number }) {
+  return (
+    <div>
+      <div className="flex justify-between text-xs font-bold text-white/90 mb-1.5">
+        <span>{label}</span>
+        <span>{score}%</span>
+      </div>
+      <div className="w-full bg-white/20 backdrop-blur-sm rounded-full h-2">
+        <div 
+          className="h-2 rounded-full bg-white transition-all duration-500" 
+          style={{ width: `${score}%` }} 
+        />
+      </div>
+    </div>
+  );
+}
+
+// Stat Item for sidebar
+function StatItem({ icon: Icon, label, value, color = "gray" }: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  color?: string;
+}) {
+  const iconColors: Record<string, string> = {
+    gray: "text-gray-600 dark:text-gray-400",
+    amber: "text-amber-600 dark:text-amber-400",
+    emerald: "text-emerald-600 dark:text-emerald-400",
+  };
+
+  return (
+    <div className="flex items-center justify-between py-2">
+      <div className="flex items-center gap-2.5">
+        <Icon className={`w-4 h-4 ${iconColors[color] || iconColors.gray}`} />
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+      </div>
+      <span className="text-sm font-bold text-gray-900 dark:text-white">{value}</span>
     </div>
   );
 }
