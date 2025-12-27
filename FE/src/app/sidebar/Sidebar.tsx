@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, ChevronRight, PanelLeft } from "lucide-react";
 // Imports from your project
-import { sidebarItems } from "@/constants/sideBarData";
+import { candidateSidebarItems, recruiterSidebarItems } from "@/constants/sideBarData";
 import { logoutHandler } from "@/handler/authHandler";
 
 interface SidebarProps {
@@ -16,6 +16,9 @@ interface SidebarProps {
 export function Sidebar({ role, onClose }: SidebarProps) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false); // 1. State for collapse
+
+  // Determine which sidebar items to show based on role
+  const sidebarItems = role === "recruiter" ? recruiterSidebarItems : candidateSidebarItems;
 
   const handleLogout = async () => {
     await logoutHandler();

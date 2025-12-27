@@ -36,7 +36,7 @@ export default async function ZumeLayout({
       
       {/* The Sidebar is called HERE in the layout */}
       <aside className="hidden md:block w-64 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-        <Sidebar />
+        <Sidebar role={userRole} />
       </aside>
 
       {/* The Page (Dashboard/Resume) is loaded HERE */}
