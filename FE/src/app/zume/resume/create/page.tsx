@@ -129,7 +129,6 @@ export default function ResumeBuilderPage() {
     setIsSubmitting(true);
     
     try {
-      console.log("Submitting Resume Data:", resumeData);
 
       // ✅ CALL THE API HANDLER
       const response = await createResumeHandler(resumeData);

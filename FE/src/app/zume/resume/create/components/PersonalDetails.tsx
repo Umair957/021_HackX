@@ -9,7 +9,6 @@ export function PersonalDetails() {
   const { personalInfo } = resumeData;
 
   // Debug: Log errors whenever they change
-  console.log("Current errors in PersonalDetails:", errors);
 
   // --- Helper: Dynamic Styles ---
   // Returns red border if error exists, otherwise standard gray/blue

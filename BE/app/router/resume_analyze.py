@@ -163,6 +163,187 @@ async def cleanup_temp_file(
             detail=f"Failed to delete file: {str(e)}"
         )
 
+
+@router.post("/analyze-bulk", status_code=status.HTTP_200_OK)
+async def analyze_bulk_resumes(
+    files: List[UploadFile] = File(...),
+    job_title: Optional[str] = Form(None),
+    job_description: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Endpoint to upload and analyze multiple resume files in bulk.
+    
+    - Accepts up to 10 PDF, DOC, or DOCX files
+    - Maximum file size per file: 5MB
+    - Optional: job_title and job_description for targeted analysis
+    - Returns individual analysis for each resume + consolidated summary
+    - Consolidated summary ranks candidates by ATS score
+    """
+    
+    # Validate number of files
+    if len(files) > 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum 10 files allowed per bulk upload"
+        )
+    
+    if len(files) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one file is required"
+        )
+    
+    # Check if user is recruiter
+    user_role = current_user.get("role")
+    if user_role != "recruiter":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bulk analysis is only available for recruiters"
+        )
+    
+    individual_results = []
+    temp_files = []
+    
+    try:
+        # Process each file
+        for file in files:
+            result = {"file_name": file.filename, "status": "processing"}
+            
+            try:
+                # Validate file type
+                if not validate_file_extension(file.filename):
+                    result["status"] = "error"
+                    result["error"] = f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
+                    individual_results.append(result)
+                    continue
+                
+                # Read file content to check size
+                file_content = await file.read()
+                file_size = len(file_content)
+                
+                # Validate file size
+                if file_size > MAX_FILE_SIZE:
+                    result["status"] = "error"
+                    result["error"] = f"File exceeds 5MB limit ({file_size / (1024 * 1024):.2f}MB)"
+                    individual_results.append(result)
+                    continue
+                
+                # Reset file pointer
+                await file.seek(0)
+                
+                # Save file temporarily
+                temp_file_path = await save_upload_file_temp(file)
+                temp_files.append(temp_file_path)
+                
+                # Analyze the resume
+                analysis_result = await analyzer_service.analyze_resume(
+                    file_path=temp_file_path,
+                    user_id=current_user.get("user_id"),
+                    file_name=file.filename,
+                    file_size=file_size,
+                    file_type=file.content_type,
+                    job_title=job_title,
+                    job_description=job_description
+                )
+                
+                result["status"] = "success"
+                result["file_size_kb"] = round(file_size / 1024, 2)
+                result["analysis"] = analysis_result
+                individual_results.append(result)
+                
+            except Exception as e:
+                logger.error(f"Error analyzing {file.filename}: {str(e)}")
+                result["status"] = "error"
+                result["error"] = str(e)
+                individual_results.append(result)
+        
+        # Generate consolidated summary
+        successful_analyses = [r for r in individual_results if r["status"] == "success"]
+        
+        consolidated_summary = {
+            "total_resumes": len(files),
+            "successful_analyses": len(successful_analyses),
+            "failed_analyses": len(files) - len(successful_analyses),
+            "job_context": {
+                "job_title": job_title,
+                "has_job_description": bool(job_description)
+            },
+            "ranking": []
+        }
+        
+        if successful_analyses:
+            # Rank by ATS score
+            ranked = sorted(
+                successful_analyses,
+                key=lambda x: x["analysis"]["ats_score"],
+                reverse=True
+            )
+            
+            for idx, resume in enumerate(ranked, 1):
+                consolidated_summary["ranking"].append({
+                    "rank": idx,
+                    "file_name": resume["file_name"],
+                    "overall_score": resume["analysis"]["score"],
+                    "ats_score": resume["analysis"]["ats_score"],
+                    "keyword_match": resume["analysis"]["keyword_match"],
+                    "top_strength": resume["analysis"]["strengths"][0] if resume["analysis"]["strengths"] else None,
+                    "main_concern": resume["analysis"]["weaknesses"][0] if resume["analysis"]["weaknesses"] else None,
+                    "recommendation": _get_recommendation(resume["analysis"]["ats_score"])
+                })
+            
+            # Calculate statistics
+            ats_scores = [r["analysis"]["ats_score"] for r in successful_analyses]
+            overall_scores = [r["analysis"]["score"] for r in successful_analyses]
+            
+            consolidated_summary["statistics"] = {
+                "average_ats_score": round(sum(ats_scores) / len(ats_scores), 2),
+                "average_overall_score": round(sum(overall_scores) / len(overall_scores), 2),
+                "highest_ats_score": max(ats_scores),
+                "lowest_ats_score": min(ats_scores),
+                "strong_candidates": len([s for s in ats_scores if s >= 80]),
+                "moderate_candidates": len([s for s in ats_scores if 60 <= s < 80]),
+                "weak_candidates": len([s for s in ats_scores if s < 60])
+            }
+        
+        return {
+            "status": "success",
+            "message": f"Analyzed {len(successful_analyses)} of {len(files)} resumes successfully",
+            "consolidated_summary": consolidated_summary,
+            "individual_results": individual_results
+        }
+    
+    except HTTPException:
+        raise
+    
+    except Exception as e:
+        logger.error(f"Bulk analysis error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing bulk upload: {str(e)}"
+        )
+    
+    finally:
+        # Cleanup all temporary files
+        for temp_file in temp_files:
+            try:
+                await analyzer_service.cleanup_temp_file(temp_file)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup {temp_file}: {str(e)}")
+
+
+def _get_recommendation(ats_score: int) -> str:
+    """Generate hiring recommendation based on ATS score"""
+    if ats_score >= 85:
+        return "Highly Recommended - Strong match for the position"
+    elif ats_score >= 75:
+        return "Recommended - Good fit with minor improvements needed"
+    elif ats_score >= 60:
+        return "Consider with Caution - May require significant development"
+    else:
+        return "Not Recommended - Poor fit for the position"
+
+
 @router.get("/history", status_code=status.HTTP_200_OK)
 async def get_analysis_history(
     limit: int = 10,

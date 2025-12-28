@@ -159,3 +159,121 @@ export const getAnalysisDetailHandler = async (analysisId: string): Promise<Deta
     throw error;
   }
 };
+
+export interface BulkAnalysisResponse {
+  status: string;
+  message: string;
+  consolidated_summary: {
+    total_resumes: number;
+    successful_analyses: number;
+    failed_analyses: number;
+    job_context: {
+      job_title: string | null;
+      has_job_description: boolean;
+    };
+    ranking: {
+      rank: number;
+      file_name: string;
+      overall_score: number;
+      ats_score: number;
+      keyword_match: number;
+      top_strength: string | null;
+      main_concern: string | null;
+      recommendation: string;
+    }[];
+    statistics?: {
+      average_ats_score: number;
+      average_overall_score: number;
+      highest_ats_score: number;
+      lowest_ats_score: number;
+      strong_candidates: number;
+      moderate_candidates: number;
+      weak_candidates: number;
+    };
+  };
+  individual_results: {
+    file_name: string;
+    status: "success" | "error";
+    error?: string;
+    file_size_kb?: number;
+    analysis?: {
+      score: number;
+      ats_score: number;
+      readability_score: number;
+      keyword_match: number;
+      strengths: string[];
+      weaknesses: string[];
+      suggestions: {
+        category: string;
+        issue: string;
+        fix: string;
+        priority: "high" | "medium" | "low";
+      }[];
+      professional_links?: string[];
+      online_info?: string;
+    };
+  }[];
+}
+
+export const analyzeBulkResumesHandler = async (
+  files: File[], 
+  jobTitle?: string, 
+  jobDescription?: string
+) => {
+  try {
+    // Create FormData to send files
+    const formData = new FormData();
+    
+    // Append each file
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+    
+    // Add job details if provided
+    if (jobTitle) {
+      formData.append('job_title', jobTitle);
+    }
+    if (jobDescription) {
+      formData.append('job_description', jobDescription);
+    }
+
+    // Send to Next.js API route (which forwards to FastAPI)
+    const response = await axios.post<BulkAnalysisResponse>("/api/resumes/analyze-bulk", formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 300000, // 5 minutes timeout for bulk processing
+    });
+
+    return { 
+      data: response.data, 
+      message: response.data.message, 
+      status: response.status 
+    };
+
+  } catch (error: any) {
+    const status = error.response ? error.response.status : 500;
+    
+    let errorMessage = "Failed to analyze resumes.";
+    
+    if (status === 400) {
+      errorMessage = error.response?.data?.error || error.response?.data?.detail || "Invalid request. Please check files and try again.";
+    } else if (status === 401) {
+      errorMessage = "Session expired. Please log in again.";
+    } else if (status === 403) {
+      errorMessage = "Bulk analysis is only available for recruiters.";
+    } else if (status === 413) {
+      errorMessage = "One or more files are too large. Maximum size is 5MB per file.";
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error;
+    }
+
+    console.error("Bulk Resume Analysis Error:", error);
+
+    return { 
+      message: errorMessage, 
+      status: status,
+      data: null
+    };
+  }
+};

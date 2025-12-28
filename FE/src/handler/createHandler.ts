@@ -6,7 +6,6 @@ import { ResumeData } from "@/types/typeResume";
 export const createResumeHandler = async (resumeData: ResumeData) => {
   try {
     const payload = transformToBackend(resumeData);
-    console.log("SENDING PAYLOAD:", JSON.stringify(payload, null, 2)); // Debugging
 
     const response = await axios.post("/api/resumes/create", payload);
 

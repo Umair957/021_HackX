@@ -107,7 +107,6 @@ export default function Signup() {
         company: formData.company.trim() || undefined
       };
 
-      console.log("Sending Payload:", payload); // Debugging
 
       const res = await fetch("/api/auth/signup", {
         method: "POST",
