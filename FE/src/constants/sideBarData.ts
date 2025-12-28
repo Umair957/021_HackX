@@ -1,4 +1,4 @@
-import { LayoutDashboard, FileText, Settings, Briefcase, FileSearch, Mail } from "lucide-react";
+import { LayoutDashboard, FileText, Settings, Briefcase, FileSearch, Mail, User } from "lucide-react";
 
 // Candidate sidebar items
 export const candidateSidebarItems = [
@@ -6,6 +6,11 @@ export const candidateSidebarItems = [
     label: "Dashboard", 
     href: "/zume/dashboard", 
     icon: LayoutDashboard 
+  },
+  { 
+    label: "Profile", 
+    href: "/zume/profile", 
+    icon: User 
   },
   { 
     label: "Resume", 

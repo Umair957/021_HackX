@@ -8,6 +8,7 @@ from app.router.resume_analyze import router as analyze_router
 from app.router.dashboard import router as dashboard_router
 from app.router.jobs import router as jobs_router
 from app.router.gmail_integration import router as gmail_router
+from app.router.profile import router as profile_router
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.utils.logger import get_logger
 import signal
@@ -73,6 +74,7 @@ app.include_router(analyze_router, prefix="/api/v1/resume", tags=["RESUME_ANALYS
 app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["DASHBOARD"])
 app.include_router(jobs_router, prefix="/api/v1/jobs", tags=["JOBS"])
 app.include_router(gmail_router, prefix="/api/v1/gmail", tags=["GMAIL_INTEGRATION"])
+app.include_router(profile_router, prefix="/api/v1/profile", tags=["PROFILE"])
 
 
 @app.get("/")

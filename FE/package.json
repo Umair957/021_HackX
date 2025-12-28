@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@types/lodash": "^4.17.21",
     "axios": "^1.13.2",
     "baseline-browser-mapping": "^2.9.7",
     "bcryptjs": "^3.0.3",
@@ -16,6 +17,7 @@
     "framer-motion": "^12.23.26",
     "js-cookie": "^3.0.5",
     "jwt-decode": "^4.0.0",
+    "lodash": "^4.17.21",
     "lucide-react": "^0.555.0",
     "mongoose": "^9.0.1",
     "motion": "^12.23.26",
