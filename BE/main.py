@@ -5,6 +5,8 @@ from app.database.connection import connect
 from app.router.auth import router as auth_router
 from app.router.resume_create import router as resume_router
 from app.router.resume_analyze import router as analyze_router
+from app.router.dashboard import router as dashboard_router
+from app.router.jobs import router as jobs_router
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.utils.logger import get_logger
 import signal
@@ -55,6 +57,8 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["AUTH"])
 app.include_router(resume_router, prefix="/api/v1/resume", tags=["RESUME"])
 app.include_router(analyze_router, prefix="/api/v1/resume", tags=["RESUME_ANALYSIS"])
+app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["DASHBOARD"])
+app.include_router(jobs_router, prefix="/api/v1/jobs", tags=["JOBS"])
 
 
 @app.get("/")

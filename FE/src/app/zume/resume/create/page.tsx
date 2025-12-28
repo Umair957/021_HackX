@@ -85,7 +85,7 @@ export default function ResumeBuilderPage() {
       for (let i = 0; i < resumeData.workExperience.length; i++) {
         const result = workExperienceSchema.safeParse(resumeData.workExperience[i]);
         if (!result.success) {
-          const firstError = result.error?.errors?.[0];
+          const firstError = result.error?.issues?.[0];
           showToast("error", "Invalid Work Experience", `Entry ${i + 1}: ${firstError?.message}`);
           return false;
         }
@@ -101,7 +101,7 @@ export default function ResumeBuilderPage() {
       for (let i = 0; i < resumeData.education.length; i++) {
         const result = educationSchema.safeParse(resumeData.education[i]);
         if (!result.success) {
-          const firstError = result.error?.errors?.[0];
+          const firstError = result.error?.issues?.[0];
           showToast("error", "Invalid Education", `Entry ${i + 1}: ${firstError?.message}`);
           return false;
         }
@@ -156,13 +156,13 @@ export default function ResumeBuilderPage() {
         throw new Error(response.message || "Unknown error occurred");
       }
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to save resume:", error);
       
       showToast(
         "error",
         "Save Failed",
-        error.message || "Could not save your resume. Please try again."
+        error instanceof Error ? error.message : "Could not save your resume. Please try again."
       );
     } finally {
       setIsSubmitting(false);

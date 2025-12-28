@@ -25,7 +25,7 @@ interface BulkAnalysisResult {
       fix: string;
       priority: "high" | "medium" | "low";
     }[];
-    professionalLinks: string[];
+    professionalLinks?: string[];
     onlineInfo?: string;
   };
   error?: string;
@@ -132,7 +132,7 @@ export default function CVSidebar({
 
                   {/* CV Info */}
                   <button
-                    onClick={() => viewMode === "individual" && onSelectIndividual(index)}
+                    onClick={() => onSelectIndividual(index)}
                     className={`w-full p-3 text-left ${
                       viewMode === "compare" ? "pl-11" : ""
                     } ${viewMode === "individual" ? "hover:bg-slate-50 dark:hover:bg-slate-800" : ""}`}

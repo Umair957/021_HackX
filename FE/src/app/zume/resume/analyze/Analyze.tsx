@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Upload, FileText, Sparkles, ChevronDown, ChevronUp, LayoutGrid, User, BarChart3 } from "lucide-react";
+import { ArrowLeft, Upload, FileText, Sparkles, LayoutGrid, User, BarChart3 } from "lucide-react";
 import ConfirmModal from "@/ui/dialogModal";
 import SideToast from "@/ui/Toast";
 import { ToastType } from "@/constants/toastData";
@@ -85,7 +85,7 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [bulkResults, setBulkResults] = useState<BulkAnalysisResult[]>([]);
   const [consolidatedSummary, setConsolidatedSummary] = useState<ConsolidatedSummary | null>(null);
-  const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
+  // const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
   
   // Bulk analysis view modes
   const [viewMode, setViewMode] = useState<"summary" | "compare" | "individual">("summary");
@@ -97,6 +97,10 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
   const [jobDescription, setJobDescription] = useState<string>("");
   const [analyzingProgress, setAnalyzingProgress] = useState<string>("");
   const [filesBeingAnalyzed, setFilesBeingAnalyzed] = useState<number>(0);
+  
+  // Job selection state
+  const [jobs, setJobs] = useState<Array<{ id: string; title: string; status: string; description?: string }>>([]);
+  const [selectedJobId, setSelectedJobId] = useState<string>("");
 
   // --- TOAST STATE ---
   const [toast, setToast] = useState<{
@@ -116,6 +120,38 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
   };
 
   const closeToast = () => setToast((prev) => ({ ...prev, isVisible: false }));
+
+  // --- FETCH JOBS ---
+  React.useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const response = await fetch("/api/jobs");
+        const data = await response.json();
+        if (data.data) {
+          setJobs(data.data);
+          
+          // Check if job_id is in URL params (from job posting page)
+          const searchParams = new URLSearchParams(window.location.search);
+          const jobIdParam = searchParams.get("job_id");
+          if (jobIdParam) {
+            setSelectedJobId(jobIdParam);
+            // Auto-populate job title from selected job
+            const selectedJob = data.data.find((j: { id: string }) => j.id === jobIdParam);
+            if (selectedJob) {
+              setJobTitle(selectedJob.title);
+              setJobDescription(selectedJob.description || "");
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching jobs:", err);
+      }
+    };
+    
+    if (userRole === "recruiter") {
+      fetchJobs();
+    }
+  }, [userRole]);
 
   // --- HANDLERS ---
   const handleFileUpload = async (file: File) => {
@@ -160,7 +196,7 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
         }, 500);
       } else {
         // API ERROR
-        throw new Error(response.error || "Analysis failed");
+        throw new Error(response.message || "Analysis failed");
       }
     } catch (error: unknown) {
       console.error("Error analyzing resume:", error);
@@ -190,7 +226,27 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
         }
 
         // Transform the results
-        const transformedResults: BulkAnalysisResult[] = response.data.individual_results.map((result: any) => ({
+        const transformedResults: BulkAnalysisResult[] = response.data.individual_results.map((result: {
+          file_name: string;
+          status: "success" | "error";
+          error?: string;
+          analysis?: {
+            score: number;
+            ats_score: number;
+            readability_score: number;
+            keyword_match: number;
+            strengths: string[];
+            weaknesses: string[];
+            suggestions: {
+              category: string;
+              issue: string;
+              fix: string;
+              priority: "high" | "medium" | "low";
+            }[];
+            professional_links?: string[];
+            online_info?: string;
+          };
+        }) => ({
           fileName: result.file_name,
           status: result.status,
           data: result.analysis ? {
@@ -220,7 +276,7 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
           }, 100);
         }, 500);
       } else {
-        throw new Error(response.error || "Bulk analysis failed");
+        throw new Error(response.message || "Bulk analysis failed");
       }
     } catch (error: unknown) {
       console.error("Error in bulk analysis:", error);
@@ -230,17 +286,17 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
     }
   };
 
-  const toggleResultExpanded = (index: number) => {
-    setExpandedResults(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(index)) {
-        newSet.delete(index);
-      } else {
-        newSet.add(index);
-      }
-      return newSet;
-    });
-  };
+  // const toggleResultExpanded = (index: number) => {
+  //   setExpandedResults(prev => {
+  //     const newSet = new Set(prev);
+  //     if (newSet.has(index)) {
+  //       newSet.delete(index);
+  //     } else {
+  //       newSet.add(index);
+  //     }
+  //     return newSet;
+  //   });
+  // };
 
   const toggleComparisonSelection = (index: number) => {
     setSelectedForComparison(prev => {
@@ -341,14 +397,54 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
               </div>
 
               {userRole === "recruiter" ? (
-                <BulkFileUpload
-                  onFilesUpload={handleBulkFilesUpload}
-                  jobTitle={jobTitle}
-                  setJobTitle={setJobTitle}
-                  jobDescription={jobDescription}
-                  setJobDescription={setJobDescription}
-                  maxFiles={10}
-                />
+                <div className="space-y-6">
+                  {/* Job Selection for Recruiters */}
+                  <div className="space-y-3">
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      Select a Job Opening (Optional)
+                    </label>
+                    <select
+                      value={selectedJobId}
+                      onChange={(e) => {
+                        const jobId = e.target.value;
+                        setSelectedJobId(jobId);
+                        
+                        // Auto-populate job details when job is selected
+                        if (jobId) {
+                          const job = jobs.find((j) => j.id === jobId);
+                          if (job) {
+                            setJobTitle(job.title);
+                            setJobDescription(job.description || "");
+                          }
+                        } else {
+                          setJobTitle("");
+                          setJobDescription("");
+                        }
+                      }}
+                      className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                    >
+                      <option value="">-- Upload for General Analysis --</option>
+                      {jobs.map((job) => (
+                        <option key={job.id} value={job.id}>
+                          {job.title} ({job.status.toUpperCase()})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Selecting a job will automatically use its title and description for analysis
+                    </p>
+                  </div>
+
+                  {/* Bulk File Upload */}
+                  <BulkFileUpload
+                    onFilesUpload={handleBulkFilesUpload}
+                    jobTitle={jobTitle}
+                    setJobTitle={setJobTitle}
+                    jobDescription={jobDescription}
+                    setJobDescription={setJobDescription}
+                    maxFiles={10}
+                  />
+                </div>
               ) : (
                 <FileUpload
                   onFileUpload={handleFileUpload}
@@ -370,8 +466,8 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
               <ImprovementSuggestions suggestions={analysisData.suggestions} />
               {analysisData.professionalLinks && analysisData.professionalLinks.length > 0 && (
                 <OnlinePresence 
-                  links={analysisData.professionalLinks} 
-                  info={analysisData.onlineInfo}
+                  professionalLinks={analysisData.professionalLinks} 
+                  onlineInfo={analysisData.onlineInfo}
                 />
               )}
             </div>
@@ -380,23 +476,129 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
           {/* Bulk analysis results */}
           {bulkResults.length > 0 && (
             <div ref={resultsRef} className="p-8">
-              {/* View mode tabs and content */}
+              {/* View Mode Tabs */}
+              <div className="flex items-center justify-center mb-8">
+                <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1">
+                  <button
+                    onClick={() => setViewMode("summary")}
+                    className={`px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                      viewMode === "summary"
+                        ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                    Summary
+                  </button>
+                  <button
+                    onClick={() => setViewMode("compare")}
+                    className={`px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                      viewMode === "compare"
+                        ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                    Compare
+                  </button>
+                  <button
+                    onClick={() => setViewMode("individual")}
+                    className={`px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                      viewMode === "individual"
+                        ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <User className="w-4 h-4" />
+                    Individual
+                  </button>
+                </div>
+              </div>
+
+              {/* Content Area */}
               {viewMode === "summary" && consolidatedSummary && (
                 <ConsolidatedSummary data={consolidatedSummary} />
               )}
-              
-              {viewMode === "compare" && (
-                <ComparisonView 
-                  results={bulkResults}
-                  selectedIndices={Array.from(selectedForComparison)}
-                />
-              )}
-              
-              {viewMode === "individual" && currentIndividualView !== null && (
-                <IndividualView 
-                  result={bulkResults[currentIndividualView]}
-                  onClose={() => setCurrentIndividualView(null)}
-                />
+
+              {(viewMode === "compare" || viewMode === "individual") && (
+                <div className="flex gap-6">
+                  <CVSidebar
+                    results={bulkResults}
+                    selectedForComparison={selectedForComparison}
+                    currentIndividualView={currentIndividualView}
+                    viewMode={viewMode}
+                    onToggleComparison={toggleComparisonSelection}
+                    onSelectIndividual={(index: number) => {
+                      setCurrentIndividualView(index);
+                      setViewMode("individual");
+                    }}
+                  />
+
+                  <div className="flex-1">
+                    {viewMode === "compare" && selectedForComparison.size > 0 && (
+                      <ComparisonView
+                        data={Array.from(selectedForComparison).map((idx) => {
+                          const r = bulkResults[idx];
+                          return {
+                            fileName: r?.fileName || "Unknown",
+                            score: r?.data?.score ?? 0,
+                            atsScore: r?.data?.atsScore ?? 0,
+                            readabilityScore: r?.data?.readabilityScore ?? 0,
+                            keywordMatch: r?.data?.keywordMatch ?? 0,
+                            strengths: r?.data?.strengths || [],
+                            weaknesses: r?.data?.weaknesses || [],
+                            topSkills: (r?.data?.strengths || []).slice(0, 5),
+                          };
+                        })}
+                      />
+                    )}
+
+                    {viewMode === "compare" && selectedForComparison.size === 0 && (
+                      <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <BarChart3 className="w-16 h-16 text-slate-400 dark:text-slate-600 mb-4" />
+                        <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                          Select Resumes to Compare
+                        </h3>
+                        <p className="text-slate-500 dark:text-slate-400 max-w-md">
+                          Choose resumes from the sidebar to see a detailed comparison of their scores, strengths, and weaknesses.
+                        </p>
+                      </div>
+                    )}
+                    
+                    {viewMode === "individual" && currentIndividualView !== null && (
+                      <IndividualView
+                        data={(() => {
+                          const r = bulkResults[currentIndividualView];
+                          return {
+                            fileName: r?.fileName || "Unknown",
+                            score: r?.data?.score ?? 0,
+                            atsScore: r?.data?.atsScore ?? 0,
+                            keywordMatch: r?.data?.keywordMatch ?? 0,
+                            strengths: r?.data?.strengths || [],
+                            weaknesses: r?.data?.weaknesses || [],
+                            suggestions: r?.data?.suggestions || [],
+                            professionalLinks: r?.data?.professionalLinks || [],
+                            onlineInfo: r?.data?.onlineInfo,
+                            readabilityScore: r?.data?.readabilityScore ?? 0,
+                          };
+                        })()}
+                        onBack={() => setCurrentIndividualView(null)}
+                      />
+                    )}
+
+                    {viewMode === "individual" && currentIndividualView === null && (
+                      <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <User className="w-16 h-16 text-slate-400 dark:text-slate-600 mb-4" />
+                        <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                          Select a Resume to View
+                        </h3>
+                        <p className="text-slate-500 dark:text-slate-400 max-w-md">
+                          Click on any resume from the sidebar to see its detailed analysis and recommendations.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -455,6 +657,7 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
       {/* Toast Notification */}
       {toast.isVisible && (
         <SideToast
+          isVisible={toast.isVisible}
           type={toast.type}
           title={toast.title}
           description={toast.description}

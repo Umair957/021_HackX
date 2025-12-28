@@ -32,6 +32,7 @@ class ResumeAnalysis(Document):
     Allows users to view previous CV analysis results
     """
     user_id: str  # Reference to User document ID
+    job_id: Optional[str] = None  # Reference to Job document ID (if analysis is for a specific job)
     
     # Resume file information
     file_name: str
@@ -67,6 +68,7 @@ class ResumeAnalysis(Document):
         name = "resume_analyses"
         indexes = [
             "user_id",  # Index for fast user-based queries
+            "job_id",   # Index for filtering by job
             "analyzed_at",  # Index for sorting by date
         ]
 

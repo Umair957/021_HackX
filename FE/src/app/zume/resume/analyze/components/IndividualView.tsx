@@ -13,6 +13,7 @@ interface IndividualViewData {
   keywordMatch: number;
   strengths: string[];
   weaknesses: string[];
+  readabilityScore: number;
   suggestions: {
     category: string;
     issue: string;

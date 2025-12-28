@@ -95,7 +95,7 @@ export function Projects() {
     }));
   };
 
-  const updateDate = (field: "startDate" | "endDate" | "isCurrent", value: ProjectType["dates"][keyof ProjectType["dates"]]) => {
+  const updateDate = (field: "startDate" | "endDate" | "isCurrent", value: string | boolean) => {
     setFormData(prev => ({
         ...prev,
         dates: { ...prev.dates!, [field]: value }

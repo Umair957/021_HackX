@@ -8,7 +8,7 @@ from enum import Enum
 
 class Location(BaseModel):
     city: str
-    country: str
+    country: Optional[str] = None
 
 class SocialUrls(BaseModel):
     linkedin: Optional[str] = None

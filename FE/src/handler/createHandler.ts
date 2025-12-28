@@ -15,14 +15,15 @@ export const createResumeHandler = async (resumeData: ResumeData) => {
       status: response.status 
     };
 
-  } catch (error: any) {
-    const status = error.response ? error.response.status : 500;
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { status: number; data?: { detail?: unknown } } };
+    const status = axiosError.response?.status ?? 500;
     
     // ✅ IMPROVEMENT: Extract the specific validation details
     let errorMessage = "Failed to save resume.";
     
     if (status === 422) {
-      const detail = error.response?.data?.detail;
+      const detail = axiosError.response?.data?.detail;
       console.error("VALIDATION ERROR DETAIL:", JSON.stringify(detail, null, 2));
       
       // Try to format the error nicely for the UI
@@ -73,8 +74,8 @@ const transformToBackend = (data: ResumeData) => {
     urls: personalInfo.urls || {},
 
     work_experience: data.workExperience.map((job) => {
-      const startDate = safeDate(job.startDate);
-      const endDate = safeDate(job.endDate);
+      const startDate = safeDate(job.dates.startDate);
+      const endDate = safeDate(job.dates.endDate);
       
       return {
         title: job.title,
@@ -85,7 +86,7 @@ const transformToBackend = (data: ResumeData) => {
           // Backend requires valid datetime - use today's date if empty
           start_date: startDate || new Date().toISOString().split('T')[0],
           end_date: endDate || null,
-          is_current: job.current || false
+          is_current: job.dates.isCurrent || false
         }
       };
     }),
@@ -96,7 +97,7 @@ const transformToBackend = (data: ResumeData) => {
       field_of_study: edu.fieldOfStudy,
       // ✅ Fix: Ensure graduation_year is a number (use current year if missing/invalid)
       graduation_year: safeInt(edu.graduationYear) || new Date().getFullYear(),
-      gpa: edu.gpa ? parseFloat(edu.gpa) : null
+      gpa: edu.gpa ?? null
     })),
 
     technical_skills: data.technicalSkills,
@@ -108,7 +109,7 @@ const transformToBackend = (data: ResumeData) => {
     })),
 
     certifications: data.certifications.map((cert) => {
-      const certData: any = {
+      const certData: { name: string; issuer: string; date?: string } = {
         name: cert.name,
         issuer: cert.issuer
       };
@@ -120,26 +121,28 @@ const transformToBackend = (data: ResumeData) => {
     }),
 
     projects: data.projects.map((proj) => {
-      const dates: any = {};
+      const dates: { start_date?: string; end_date?: string } = {};
       
-      const startDate = safeDate(proj.startDate);
-      const endDate = safeDate(proj.endDate);
-      
-      if (startDate !== undefined) dates.start_date = startDate;
-      if (endDate !== undefined) dates.end_date = endDate;
+      if (proj.dates) {
+        const startDate = safeDate(proj.dates.startDate);
+        const endDate = safeDate(proj.dates.endDate);
+        
+        if (startDate !== undefined) dates.start_date = startDate;
+        if (endDate !== undefined) dates.end_date = endDate;
+      }
       
       return {
         name: proj.name,
         description: proj.description || null,
         technologies: proj.technologies || [],
         url: proj.url || null,
-        dates
+        dates: Object.keys(dates).length > 0 ? dates : null
       };
     }),
 
     preferences: {
       desired_titles: data.preferences.desiredTitles || [],
-      target_industries: data.preferences.target_industries || [], // Note: check if snake_case in store or camelCase
+      target_industries: data.preferences.targetIndustries || [],
       work_mode: data.preferences.workMode || null,
       min_salary: safeInt(data.preferences.minSalary),
       max_salary: safeInt(data.preferences.maxSalary),
