@@ -465,3 +465,58 @@ Return ONLY the JSON object, no additional text or markdown formatting.
                 logger.info("Temporary file cleaned up")
         except Exception as e:
             logger.warning(f"Failed to cleanup temp file: {str(e)}")
+    
+    async def apply_fix_to_content(self, cv_content: str, fix_instruction: str, category: str) -> str:
+        """
+        Apply an AI suggestion to the CV content and return the modified content.
+        
+        Args:
+            cv_content: The current CV content (plain text)
+            fix_instruction: The fix to apply (from AI suggestions)
+            category: The category of the fix (e.g., 'Formatting', 'Content')
+        
+        Returns:
+            Modified CV content as a string
+        """
+        try:
+            logger.info(f"Applying fix for category: {category}")
+            
+            prompt = f"""You are an expert resume writer and editor. You have been given a resume and a specific improvement to make.
+
+**RESUME CONTENT:**
+{cv_content}
+
+**CATEGORY:** {category}
+**IMPROVEMENT TO APPLY:** {fix_instruction}
+
+**INSTRUCTIONS:**
+1. Apply ONLY this specific improvement to the resume
+2. Maintain the overall structure and formatting of the resume
+3. Keep all other content unchanged unless directly related to this improvement
+4. Return the complete modified resume content
+5. Do NOT add explanations or comments - return ONLY the modified resume text
+
+Return the complete improved resume:"""
+
+            response = self.client.models.generate_content(
+                model='gemini-2.0-flash-exp',
+                contents=prompt
+            )
+            
+            modified_content = response.text.strip()
+            
+            # Clean up any markdown formatting if present
+            if modified_content.startswith("```"):
+                lines = modified_content.split("\n")
+                modified_content = "\n".join(lines[1:-1]) if len(lines) > 2 else modified_content
+                modified_content = modified_content.strip()
+            
+            logger.info("Successfully applied fix to CV content")
+            return modified_content
+            
+        except Exception as e:
+            logger.error(f"Error applying fix: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to apply fix: {str(e)}"
+            )

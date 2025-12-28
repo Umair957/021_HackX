@@ -474,3 +474,44 @@ async def get_analysis_detail(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching analysis details: {str(e)}"
         )
+
+
+@router.post("/apply-fix")
+async def apply_fix_to_resume(
+    cv_content: str = Form(...),
+    fix_instruction: str = Form(...),
+    category: str = Form(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Apply an AI suggestion to the resume content.
+    Returns the modified CV content.
+    """
+    try:
+        user_id = current_user.get("user_id")
+        
+        logger.info(f"Applying fix for user {user_id}, category: {category}")
+        
+        # Use AI service to apply the fix
+        modified_content = await analyzer_service.apply_fix_to_content(
+            cv_content=cv_content,
+            fix_instruction=fix_instruction,
+            category=category
+        )
+        
+        return {
+            "status": "success",
+            "message": "Fix applied successfully",
+            "data": {
+                "modified_content": modified_content,
+                "fix_applied": fix_instruction,
+                "category": category
+            }
+        }
+    
+    except Exception as e:
+        logger.error(f"Error applying fix: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error applying fix: {str(e)}"
+        )

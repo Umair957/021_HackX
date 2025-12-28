@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { getAnalysisHistoryHandler, getAnalysisDetailHandler, type AnalysisHistoryItem } from "@/handler/analyzeHandler";
 import { useRouter } from "next/navigation";
+import TrendsWidget from "./TrendsWidget";
 
 export default function CandidateDashboard() {
   const router = useRouter();
@@ -464,6 +465,15 @@ export default function CandidateDashboard() {
               </div>
             </motion.div>
           )}
+
+          {/* Industry Trends Widget */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <TrendsWidget />
+          </motion.div>
         </div>
 
       </div>

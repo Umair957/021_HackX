@@ -1,20 +1,24 @@
 "use client";
 
 import React, { useState } from "react";
-import { AlertCircle, CheckCircle, Info, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { AlertCircle, CheckCircle, Info, ChevronDown, ChevronUp, Sparkles, Wand2, Loader2 } from "lucide-react";
 
 interface Suggestion {
   category: string;
   issue: string;
   fix: string;
   priority: "high" | "medium" | "low";
+  applied?: boolean;
 }
 
 interface ImprovementSuggestionsProps {
   suggestions: Suggestion[];
+  onApplyFix?: (index: number, fix: string) => void;
+  isApplyingFix?: number | null;
+  appliedFixes?: Set<number>;
 }
 
-export function ImprovementSuggestions({ suggestions }: ImprovementSuggestionsProps) {
+export function ImprovementSuggestions({ suggestions, onApplyFix, isApplyingFix, appliedFixes = new Set() }: ImprovementSuggestionsProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [filter, setFilter] = useState<"all" | "high" | "medium" | "low">("all");
 
@@ -190,9 +194,43 @@ export function ImprovementSuggestions({ suggestions }: ImprovementSuggestionsPr
                       {suggestion.fix}
                     </p>
                     
-                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+                      {onApplyFix && (
+                        <button
+                          onClick={() => onApplyFix(index, suggestion.fix)}
+                          disabled={appliedFixes.has(index) || isApplyingFix === index}
+                          className={`
+                            px-4 py-2 rounded-lg font-semibold text-sm transition-all duration-200
+                            flex items-center gap-2
+                            ${appliedFixes.has(index)
+                              ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 cursor-not-allowed"
+                              : isApplyingFix === index
+                              ? "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 cursor-wait"
+                              : "bg-purple-600 hover:bg-purple-700 text-white shadow-md hover:shadow-lg"
+                            }
+                          `}
+                        >
+                          {isApplyingFix === index ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Applying...
+                            </>
+                          ) : appliedFixes.has(index) ? (
+                            <>
+                              <CheckCircle className="w-4 h-4" />
+                              Applied
+                            </>
+                          ) : (
+                            <>
+                              <Wand2 className="w-4 h-4" />
+                              Apply Fix
+                            </>
+                          )}
+                        </button>
+                      )}
+                      
                       <button className="text-sm font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors">
-                        Learn more about this suggestion →
+                        Learn more →
                       </button>
                     </div>
                   </div>

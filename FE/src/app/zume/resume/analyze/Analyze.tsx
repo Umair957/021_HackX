@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Upload, FileText, Sparkles, LayoutGrid, User, BarChart3 } from "lucide-react";
+import { ArrowLeft, Upload, FileText, Sparkles, LayoutGrid, User, BarChart3, CheckCircle } from "lucide-react";
 import ConfirmModal from "@/ui/dialogModal";
 import SideToast from "@/ui/Toast";
 import { ToastType } from "@/constants/toastData";
@@ -26,6 +26,7 @@ interface AnalysisData {
     issue: string;
     fix: string;
     priority: "high" | "medium" | "low";
+    applied?: boolean;
   }[];
   atsScore: number;
   readabilityScore: number;
@@ -85,6 +86,9 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [bulkResults, setBulkResults] = useState<BulkAnalysisResult[]>([]);
   const [consolidatedSummary, setConsolidatedSummary] = useState<ConsolidatedSummary | null>(null);
+  const [modifiedCV, setModifiedCV] = useState<string | null>(null);
+  const [appliedFixes, setAppliedFixes] = useState<Set<number>>(new Set());
+  const [isApplyingFix, setIsApplyingFix] = useState<number | null>(null);
   // const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
   
   // Bulk analysis view modes
@@ -319,6 +323,87 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
     setAnalysisData(null);
     setJobTitle("");
     setJobDescription("");
+    setModifiedCV(null);
+    setAppliedFixes(new Set());
+  };
+
+  const handleApplyFix = async (suggestionIndex: number, fix: string) => {
+    if (!uploadedFile || !analysisData) return;
+    
+    setIsApplyingFix(suggestionIndex);
+    
+    try {
+      // Read the current CV content (if modified, use modified version)
+      const cvContent = modifiedCV || await uploadedFile.text();
+      
+      // Send to backend to apply the fix
+      const formData = new FormData();
+      formData.append("cv_content", cvContent);
+      formData.append("fix_instruction", fix);
+      formData.append("category", analysisData.suggestions[suggestionIndex].category);
+      
+      const response = await fetch("/api/resumes/apply-fix", {
+        method: "POST",
+        body: formData,
+      });
+      
+      const result = await response.json();
+      
+      if (result.status === "success" && result.data?.modified_content) {
+        // Update the modified CV content
+        setModifiedCV(result.data.modified_content);
+        
+        // Mark this suggestion as applied
+        setAppliedFixes(prev => new Set([...prev, suggestionIndex]));
+        
+        // Update the suggestion to show it's been applied
+        setAnalysisData(prev => {
+          if (!prev) return null;
+          const updated = { ...prev };
+          updated.suggestions[suggestionIndex].applied = true;
+          return updated;
+        });
+        
+        showToast("success", "Fix Applied", "Your CV has been updated with the suggestion");
+      } else {
+        throw new Error(result.message || "Failed to apply fix");
+      }
+    } catch (error) {
+      console.error("Error applying fix:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to apply fix";
+      showToast("error", "Error", errorMessage);
+    } finally {
+      setIsApplyingFix(null);
+    }
+  };
+
+  const handleSaveModifiedCV = async () => {
+    if (!modifiedCV || !uploadedFile) {
+      showToast("warning", "No Changes", "No modifications have been made to save");
+      return;
+    }
+    
+    try {
+      // Create a download link for the modified CV
+      const blob = new Blob([modifiedCV], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      
+      // Generate filename based on original file
+      const originalName = uploadedFile.name.replace(/\.[^/.]+$/, "");
+      link.download = `${originalName}_improved.txt`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      showToast("success", "CV Saved", "Your improved CV has been downloaded");
+    } catch (error) {
+      console.error("Error saving CV:", error);
+      showToast("error", "Error", "Failed to save the modified CV");
+    }
   };
 
   const handleStartNewAnalysis = () => {
@@ -461,9 +546,35 @@ export default function AnalyzeClient({ userRole, userEmail }: AnalyzeClientProp
           {/* Single file analysis results */}
           {uploadedFile && analysisData && (
             <div ref={resultsRef} className="p-8 md:p-16 space-y-8">
+              {/* Save Modified CV Button */}
+              {modifiedCV && appliedFixes.size > 0 && (
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-green-900 dark:text-green-100 mb-1">
+                      ✨ CV Improvements Applied
+                    </h3>
+                    <p className="text-sm text-green-700 dark:text-green-300">
+                      You've applied {appliedFixes.size} improvement{appliedFixes.size !== 1 ? 's' : ''} to your CV
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleSaveModifiedCV}
+                    className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-all duration-200 shadow-md hover:shadow-lg flex items-center gap-2"
+                  >
+                    <CheckCircle className="w-5 h-5" />
+                    Save Improved CV
+                  </button>
+                </div>
+              )}
+              
               {/* Results sections */}
               <AnalysisResults data={analysisData} />
-              <ImprovementSuggestions suggestions={analysisData.suggestions} />
+              <ImprovementSuggestions 
+                suggestions={analysisData.suggestions}
+                onApplyFix={handleApplyFix}
+                isApplyingFix={isApplyingFix}
+                appliedFixes={appliedFixes}
+              />
               {analysisData.professionalLinks && analysisData.professionalLinks.length > 0 && (
                 <OnlinePresence 
                   professionalLinks={analysisData.professionalLinks} 

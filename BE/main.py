@@ -9,6 +9,8 @@ from app.router.dashboard import router as dashboard_router
 from app.router.jobs import router as jobs_router
 from app.router.gmail_integration import router as gmail_router
 from app.router.profile import router as profile_router
+from app.router.templates import router as templates_router
+from app.router.trends import router as trends_router
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.utils.logger import get_logger
 import signal
@@ -75,6 +77,8 @@ app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["DASHBOAR
 app.include_router(jobs_router, prefix="/api/v1/jobs", tags=["JOBS"])
 app.include_router(gmail_router, prefix="/api/v1/gmail", tags=["GMAIL_INTEGRATION"])
 app.include_router(profile_router, prefix="/api/v1/profile", tags=["PROFILE"])
+app.include_router(templates_router, prefix="/api/v1/templates", tags=["TEMPLATES"])
+app.include_router(trends_router, prefix="/api/v1/trends", tags=["TRENDS"])
 
 
 @app.get("/")
