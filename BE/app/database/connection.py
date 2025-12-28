@@ -1,6 +1,6 @@
 from beanie import Document, init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
-from app.database.models import user, candidate, recruiter, resume_analysis, job
+from app.database.models import user, candidate, recruiter, resume_analysis, job, gmail_integration
 from app.utils.logger import get_logger
 import os
 import dotenv
@@ -27,7 +27,8 @@ class Connection:
                         candidate.CandidateProfile, 
                         recruiter.CompanyProfile,
                         resume_analysis.ResumeAnalysis,
-                        job.Job
+                        job.Job,
+                        gmail_integration.GmailIntegration
                     ]
                 )
                 ping = await db_client.db.command("ping")

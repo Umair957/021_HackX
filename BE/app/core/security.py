@@ -164,3 +164,21 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(b
     """
     token = credentials.credentials
     return await security.get_current_user(token)
+
+async def get_current_recruiter(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> str:
+    """
+    FastAPI dependency to extract and verify the current recruiter from JWT token.
+    Returns the recruiter's user ID.
+    Raises HTTPException if user is not a recruiter.
+    """
+    token = credentials.credentials
+    payload = await security.get_current_user(token)
+    
+    # Check if user is a recruiter
+    if payload.get("role") != "recruiter":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Recruiter role required."
+        )
+    
+    return payload.get("user_id")

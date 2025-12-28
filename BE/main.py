@@ -7,6 +7,7 @@ from app.router.resume_create import router as resume_router
 from app.router.resume_analyze import router as analyze_router
 from app.router.dashboard import router as dashboard_router
 from app.router.jobs import router as jobs_router
+from app.router.gmail_integration import router as gmail_router
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.utils.logger import get_logger
 import signal
@@ -20,11 +21,23 @@ async def lifespan(app: FastAPI):
     logger.info("Starting application...")
     await connect.init_db()  # Connects to Mongo & Initializes Beanie
     logger.info("Database initialized successfully")
+    
+    # Start background scheduler for Gmail scanning
+    from app.services.scheduler_service import start_scheduler, setup_scheduled_scans
+    start_scheduler()
+    await setup_scheduled_scans()
+    logger.info("Background scheduler started")
 
     yield  # The application runs here
 
     # --- SHUTDOWN ---
     logger.info("Shutting down application...")
+    
+    # Stop scheduler
+    from app.services.scheduler_service import stop_scheduler
+    stop_scheduler()
+    logger.info("Background scheduler stopped")
+    
     await connect.close_db() # Cleans up connection
 
 # Pass the lifespan to the app
@@ -59,6 +72,7 @@ app.include_router(resume_router, prefix="/api/v1/resume", tags=["RESUME"])
 app.include_router(analyze_router, prefix="/api/v1/resume", tags=["RESUME_ANALYSIS"])
 app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["DASHBOARD"])
 app.include_router(jobs_router, prefix="/api/v1/jobs", tags=["JOBS"])
+app.include_router(gmail_router, prefix="/api/v1/gmail", tags=["GMAIL_INTEGRATION"])
 
 
 @app.get("/")
