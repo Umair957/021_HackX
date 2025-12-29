@@ -121,6 +121,15 @@ export default function CandidateDashboard() {
         </p>
       </div>
 
+      {/* Industry Trends Widget - Moved to Top */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <TrendsWidget />
+      </motion.div>
+
       {/* Primary Stats - Hero Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCardNew 
@@ -466,13 +475,60 @@ export default function CandidateDashboard() {
             </motion.div>
           )}
 
-          {/* Industry Trends Widget */}
+          {/* Application Activity Widget */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
+            className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-200 dark:border-gray-800 shadow-sm"
           >
-            <TrendsWidget />
+            <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Activity</h3>
+            <div className="space-y-4">
+              {/* Profile Views */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Profile Views</span>
+                  </div>
+                  <span className="text-lg font-black text-gray-900 dark:text-white">48</span>
+                </div>
+                <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+                  <div className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" style={{ width: '75%' }} />
+                </div>
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">+12 this week</p>
+              </div>
+
+              {/* Active Applications */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Active Apps</span>
+                  </div>
+                  <span className="text-lg font-black text-gray-900 dark:text-white">12</span>
+                </div>
+                <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+                  <div className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500" style={{ width: '60%' }} />
+                </div>
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">+3 new</p>
+              </div>
+
+              {/* Response Rate */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Response Rate</span>
+                  </div>
+                  <span className="text-lg font-black text-gray-900 dark:text-white">24%</span>
+                </div>
+                <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2">
+                  <div className="h-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500" style={{ width: '24%' }} />
+                </div>
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">+5% increase</p>
+              </div>
+            </div>
           </motion.div>
         </div>
 

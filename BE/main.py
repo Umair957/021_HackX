@@ -60,9 +60,17 @@ app.add_middleware(
 )
 
 # CORS configuration (adjust origins as needed for production)
+# Add your production frontend URL to allow_origins list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://192.168.1.14:3000"],  # Add your frontend URL
+    allow_origins=[
+        "http://localhost:3000", 
+        "http://192.168.1.14:3000",
+        "http://localhost:3001",
+        # Add your production frontend URL here:
+        # "https://your-frontend.vercel.app",
+        # "https://your-frontend.netlify.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

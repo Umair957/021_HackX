@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+const apiUrl = process.env.NODE_ENV === 'production' 
+  ? process.env.PROD_SERVER_URL 
+  : process.env.DEV_SERVER_URL;
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +20,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
 
     // Forward the request to the FastAPI backend
-    const response = await fetch(`${BACKEND_URL}/api/v1/resume/analyze-bulk`, {
+    const response = await fetch(`${apiUrl}/api/v1/resume/analyze-bulk`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-const apiUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+const apiUrl = process.env.NODE_ENV === 'production' 
+  ? process.env.PROD_SERVER_URL 
+  : process.env.DEV_SERVER_URL;
 
 export async function GET(request: NextRequest) {
   try {

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from app.core.security import get_current_user
 from app.services.analyze_service import ResumeAnalyzerService
 from app.database.models.resume_analysis import ResumeAnalysis
@@ -481,16 +482,31 @@ async def apply_fix_to_resume(
     cv_content: str = Form(...),
     fix_instruction: str = Form(...),
     category: str = Form(...),
+    original_filename: str = Form(default="resume.txt"),
+    file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Apply an AI suggestion to the resume content.
-    Returns the modified CV content.
+    Saves the modified resume while preserving the original file structure.
+    Returns the modified CV content and file paths.
     """
+    temp_file_path = None
     try:
         user_id = current_user.get("user_id")
         
         logger.info(f"Applying fix for user {user_id}, category: {category}")
+        
+        # Save uploaded file temporarily if provided
+        if file:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            unique_id = str(uuid.uuid4())[:8]
+            temp_filename = f"temp_{timestamp}_{unique_id}_{file.filename}"
+            temp_file_path = TEMP_DIR / temp_filename
+            
+            with open(temp_file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            logger.info(f"Saved temporary original file: {temp_file_path}")
         
         # Use AI service to apply the fix
         modified_content = await analyzer_service.apply_fix_to_content(
@@ -499,13 +515,28 @@ async def apply_fix_to_resume(
             category=category
         )
         
+        # Save the modified CV preserving original structure
+        original_format_path, pdf_path = await analyzer_service.save_modified_cv_with_structure(
+            modified_content=modified_content,
+            original_filename=original_filename,
+            original_file_path=str(temp_file_path) if temp_file_path else None,
+            user_id=user_id,
+            output_dir=TEMP_DIR
+        )
+        
+        logger.info(f"Modified CV saved - Original: {original_format_path}, PDF: {pdf_path}")
+        
         return {
             "status": "success",
-            "message": "Fix applied successfully",
+            "message": "Fix applied successfully and saved",
             "data": {
                 "modified_content": modified_content,
                 "fix_applied": fix_instruction,
-                "category": category
+                "category": category,
+                "files": {
+                    "original_format": original_format_path,
+                    "pdf": pdf_path
+                }
             }
         }
     
@@ -514,4 +545,58 @@ async def apply_fix_to_resume(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error applying fix: {str(e)}"
+        )
+    finally:
+        # Cleanup temporary original file
+        if temp_file_path and os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+                logger.info("Cleaned up temporary original file")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp file: {str(e)}")
+
+
+@router.get("/download/{filename}")
+async def download_modified_resume(
+    filename: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Download a modified resume file (original format or PDF).
+    """
+    try:
+        file_path = TEMP_DIR / filename
+        
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="File not found"
+            )
+        
+        # Determine media type based on extension
+        ext = file_path.suffix.lower()
+        media_type_map = {
+            '.pdf': 'application/pdf',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.doc': 'application/msword',
+            '.txt': 'text/plain'
+        }
+        
+        media_type = media_type_map.get(ext, 'application/octet-stream')
+        
+        logger.info(f"Serving file: {filename} to user {current_user.get('user_id')}")
+        
+        return FileResponse(
+            path=str(file_path),
+            media_type=media_type,
+            filename=filename
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error downloading file: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error downloading file: {str(e)}"
         )

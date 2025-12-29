@@ -1,11 +1,13 @@
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from google import genai
 from google.genai import types
 from pathlib import Path
 from fastapi import HTTPException, status
 import json
 import re
+import uuid
+from datetime import datetime
 from app.database.models.resume_analysis import (
     ResumeAnalysis, 
     AnalysisScores, 
@@ -49,7 +51,7 @@ If no links found, return an empty array: []
 """
             
             response = self.client.models.generate_content(
-                model='gemini-2.0-flash-exp',
+                model='gemini-2.5-flash',
                 contents=[prompt, uploaded_file]
             )
             
@@ -101,7 +103,7 @@ If no links found, return an empty array: []
                 search_query += f" for {candidate_name}"
             
             response = self.client.models.generate_content(
-                model='gemini-2.0-flash-exp',
+                model='gemini-2.5-flash',
                 contents=search_query,
                 config=types.GenerateContentConfig(
                     tools=[types.Tool(google_search=types.GoogleSearch())]
@@ -300,7 +302,7 @@ Return ONLY the JSON object, no additional text or markdown formatting.
             # 6. Send to Gemini for analysis with the uploaded file
             logger.info("Sending file to Gemini for analysis...")
             response = self.client.models.generate_content(
-                model='gemini-2.0-flash-exp',
+                model='gemini-2.5-flash',
                 contents=[
                     prompt,
                     uploaded_file
@@ -499,7 +501,7 @@ Return ONLY the JSON object, no additional text or markdown formatting.
 Return the complete improved resume:"""
 
             response = self.client.models.generate_content(
-                model='gemini-2.0-flash-exp',
+                model='gemini-2.5-flash',
                 contents=prompt
             )
             
@@ -519,4 +521,362 @@ Return the complete improved resume:"""
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to apply fix: {str(e)}"
+            )
+    
+    async def save_modified_cv(self, modified_content: str, original_filename: str, 
+                              user_id: str, output_dir: Path) -> Tuple[str, str]:
+        """
+        Save the modified CV content in both the original format and PDF.
+        
+        Args:
+            modified_content: The modified CV content (plain text)
+            original_filename: Original filename to determine format
+            user_id: User ID for filename generation
+            output_dir: Directory to save files
+        
+        Returns:
+            Tuple of (original_format_path, pdf_path)
+        """
+        try:
+            # Generate unique filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            unique_id = str(uuid.uuid4())[:8]
+            base_name = f"modified_resume_{user_id}_{timestamp}_{unique_id}"
+            
+            # Determine original format
+            original_ext = Path(original_filename).suffix.lower()
+            
+            # Save as text file first (intermediate format)
+            text_path = output_dir / f"{base_name}.txt"
+            text_path.write_text(modified_content, encoding='utf-8')
+            logger.info(f"Saved modified content to: {text_path}")
+            
+            # Try to convert to original format
+            original_format_path = None
+            if original_ext in ['.docx', '.doc']:
+                try:
+                    from docx import Document
+                    from docx.shared import Pt
+                    
+                    # Create DOCX with modified content
+                    doc = Document()
+                    # Add content with basic formatting
+                    for paragraph in modified_content.split('\n\n'):
+                        if paragraph.strip():
+                            p = doc.add_paragraph(paragraph.strip())
+                            # Basic formatting
+                            for run in p.runs:
+                                run.font.size = Pt(11)
+                    
+                    docx_path = output_dir / f"{base_name}.docx"
+                    doc.save(str(docx_path))
+                    original_format_path = str(docx_path)
+                    logger.info(f"Saved as DOCX: {docx_path}")
+                except ImportError:
+                    logger.warning("python-docx not installed. Cannot save as DOCX. Install with: pip install python-docx")
+                except Exception as e:
+                    logger.error(f"Error creating DOCX: {str(e)}")
+            
+            # Convert to PDF using reportlab
+            pdf_path = None
+            try:
+                from reportlab.lib.pagesizes import letter
+                from reportlab.pdfgen import canvas
+                from reportlab.lib.units import inch
+                from reportlab.pdfbase import pdfmetrics
+                from reportlab.pdfbase.ttfonts import TTFont
+                
+                pdf_file = output_dir / f"{base_name}.pdf"
+                c = canvas.Canvas(str(pdf_file), pagesize=letter)
+                width, height = letter
+                
+                # Set up text formatting
+                y_position = height - 1 * inch
+                c.setFont("Helvetica", 11)
+                
+                # Write content to PDF
+                for line in modified_content.split('\n'):
+                    if y_position < 1 * inch:
+                        c.showPage()
+                        y_position = height - 1 * inch
+                        c.setFont("Helvetica", 11)
+                    
+                    # Handle long lines
+                    if len(line) > 90:
+                        words = line.split()
+                        current_line = ""
+                        for word in words:
+                            if len(current_line + " " + word) < 90:
+                                current_line += " " + word if current_line else word
+                            else:
+                                c.drawString(1 * inch, y_position, current_line)
+                                y_position -= 15
+                                current_line = word
+                                if y_position < 1 * inch:
+                                    c.showPage()
+                                    y_position = height - 1 * inch
+                                    c.setFont("Helvetica", 11)
+                        if current_line:
+                            c.drawString(1 * inch, y_position, current_line)
+                            y_position -= 15
+                    else:
+                        c.drawString(1 * inch, y_position, line)
+                        y_position -= 15
+                
+                c.save()
+                pdf_path = str(pdf_file)
+                logger.info(f"Saved as PDF: {pdf_file}")
+            except ImportError:
+                logger.warning("reportlab not installed. Cannot save as PDF. Install with: pip install reportlab")
+            except Exception as e:
+                logger.error(f"Error creating PDF: {str(e)}")
+            
+            # Return paths (use text file as fallback if conversions failed)
+            return (
+                original_format_path or str(text_path),
+                pdf_path or str(text_path)
+            )
+            
+        except Exception as e:
+            logger.error(f"Error saving modified CV: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to save modified CV: {str(e)}"
+            )
+    
+    async def save_modified_cv_with_structure(self, modified_content: str, original_filename: str,
+                                             original_file_path: Optional[str], user_id: str, 
+                                             output_dir: Path) -> Tuple[str, str]:
+        """
+        Save the modified CV content while preserving the original document structure.
+        
+        Args:
+            modified_content: The modified CV content (plain text)
+            original_filename: Original filename to determine format
+            original_file_path: Path to the original file (if available) to preserve structure
+            user_id: User ID for filename generation
+            output_dir: Directory to save files
+        
+        Returns:
+            Tuple of (original_format_path, pdf_path)
+        """
+        try:
+            # Generate unique filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            unique_id = str(uuid.uuid4())[:8]
+            base_name = f"modified_resume_{user_id}_{timestamp}_{unique_id}"
+            
+            # Determine original format
+            original_ext = Path(original_filename).suffix.lower()
+            
+            original_format_path = None
+            pdf_path = None
+            
+            # If original file provided and is DOCX, preserve its structure
+            if original_file_path and original_ext == '.docx':
+                try:
+                    from docx import Document
+                    from docx.shared import Pt, RGBColor
+                    
+                    logger.info("Preserving original DOCX structure...")
+                    
+                    # Load the original document to preserve styles
+                    doc = Document(original_file_path)
+                    
+                    # Clear existing content but keep styles
+                    for element in doc.element.body:
+                        doc.element.body.remove(element)
+                    
+                    # Parse modified content and apply to document
+                    paragraphs = modified_content.split('\n\n')
+                    
+                    for para_text in paragraphs:
+                        if not para_text.strip():
+                            continue
+                            
+                        # Add paragraph with original document's default style
+                        p = doc.add_paragraph(para_text.strip())
+                        
+                        # Try to detect and apply basic formatting hints from text
+                        # Headers (ALL CAPS or starts with common header keywords)
+                        if para_text.strip().isupper() or any(para_text.strip().startswith(kw) for kw in ['EXPERIENCE', 'EDUCATION', 'SKILLS', 'SUMMARY', 'CONTACT']):
+                            p.style = 'Heading 1' if 'Heading 1' in [s.name for s in doc.styles] else 'Normal'
+                            for run in p.runs:
+                                run.bold = True
+                                run.font.size = Pt(14)
+                        # Bullet points
+                        elif para_text.strip().startswith(('•', '-', '*', '▪')):
+                            p.style = 'List Bullet' if 'List Bullet' in [s.name for s in doc.styles] else 'Normal'
+                        # Regular content
+                        else:
+                            for run in p.runs:
+                                run.font.size = Pt(11)
+                    
+                    docx_path = output_dir / f"{base_name}.docx"
+                    doc.save(str(docx_path))
+                    original_format_path = str(docx_path)
+                    logger.info(f"Saved DOCX with preserved structure: {docx_path}")
+                    
+                except ImportError:
+                    logger.warning("python-docx not installed. Cannot preserve DOCX structure.")
+                except Exception as e:
+                    logger.error(f"Error preserving DOCX structure: {str(e)}")
+            
+            # If DOCX creation failed or wasn't applicable, create new document
+            if not original_format_path and original_ext in ['.docx', '.doc']:
+                try:
+                    from docx import Document
+                    from docx.shared import Pt, RGBColor
+                    
+                    doc = Document()
+                    
+                    # Add content with smart formatting
+                    for para_text in modified_content.split('\n\n'):
+                        if not para_text.strip():
+                            continue
+                            
+                        p = doc.add_paragraph(para_text.strip())
+                        
+                        # Apply formatting based on content analysis
+                        if para_text.strip().isupper() or any(para_text.strip().startswith(kw) for kw in ['EXPERIENCE', 'EDUCATION', 'SKILLS', 'SUMMARY', 'CONTACT']):
+                            for run in p.runs:
+                                run.bold = True
+                                run.font.size = Pt(14)
+                        elif para_text.strip().startswith(('•', '-', '*', '▪')):
+                            p.style = 'List Bullet'
+                        else:
+                            for run in p.runs:
+                                run.font.size = Pt(11)
+                    
+                    docx_path = output_dir / f"{base_name}.docx"
+                    doc.save(str(docx_path))
+                    original_format_path = str(docx_path)
+                    logger.info(f"Saved new DOCX: {docx_path}")
+                    
+                except ImportError:
+                    logger.warning("python-docx not installed.")
+                except Exception as e:
+                    logger.error(f"Error creating DOCX: {str(e)}")
+            
+            # Convert to PDF
+            try:
+                from reportlab.lib.pagesizes import letter
+                from reportlab.pdfgen import canvas
+                from reportlab.lib.units import inch
+                from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+                from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                from reportlab.lib.enums import TA_LEFT, TA_CENTER
+                
+                pdf_file = output_dir / f"{base_name}.pdf"
+                doc = SimpleDocTemplate(str(pdf_file), pagesize=letter)
+                story = []
+                styles = getSampleStyleSheet()
+                
+                # Create custom styles
+                header_style = ParagraphStyle(
+                    'CustomHeader',
+                    parent=styles['Heading1'],
+                    fontSize=14,
+                    textColor='#1a1a1a',
+                    spaceAfter=12,
+                    bold=True
+                )
+                
+                normal_style = ParagraphStyle(
+                    'CustomNormal',
+                    parent=styles['Normal'],
+                    fontSize=11,
+                    textColor='#333333',
+                    spaceAfter=8
+                )
+                
+                # Parse and add content
+                for para_text in modified_content.split('\n\n'):
+                    if not para_text.strip():
+                        continue
+                    
+                    # Detect headers
+                    if para_text.strip().isupper() or any(para_text.strip().startswith(kw) for kw in ['EXPERIENCE', 'EDUCATION', 'SKILLS', 'SUMMARY', 'CONTACT']):
+                        story.append(Paragraph(para_text.strip(), header_style))
+                    else:
+                        story.append(Paragraph(para_text.strip(), normal_style))
+                    
+                    story.append(Spacer(1, 0.1 * inch))
+                
+                doc.build(story)
+                pdf_path = str(pdf_file)
+                logger.info(f"Saved PDF with formatting: {pdf_file}")
+                
+            except ImportError:
+                logger.warning("reportlab not fully installed. Using basic PDF generation.")
+                # Fallback to basic PDF
+                try:
+                    from reportlab.pdfgen import canvas
+                    from reportlab.lib.pagesizes import letter
+                    from reportlab.lib.units import inch
+                    
+                    pdf_file = output_dir / f"{base_name}.pdf"
+                    c = canvas.Canvas(str(pdf_file), pagesize=letter)
+                    width, height = letter
+                    y_position = height - 1 * inch
+                    c.setFont("Helvetica", 11)
+                    
+                    for line in modified_content.split('\n'):
+                        if y_position < 1 * inch:
+                            c.showPage()
+                            y_position = height - 1 * inch
+                            c.setFont("Helvetica", 11)
+                        
+                        if len(line) > 90:
+                            words = line.split()
+                            current_line = ""
+                            for word in words:
+                                if len(current_line + " " + word) < 90:
+                                    current_line += " " + word if current_line else word
+                                else:
+                                    c.drawString(1 * inch, y_position, current_line)
+                                    y_position -= 15
+                                    current_line = word
+                                    if y_position < 1 * inch:
+                                        c.showPage()
+                                        y_position = height - 1 * inch
+                                        c.setFont("Helvetica", 11)
+                            if current_line:
+                                c.drawString(1 * inch, y_position, current_line)
+                                y_position -= 15
+                        else:
+                            c.drawString(1 * inch, y_position, line)
+                            y_position -= 15
+                    
+                    c.save()
+                    pdf_path = str(pdf_file)
+                    logger.info(f"Saved basic PDF: {pdf_file}")
+                except Exception as e:
+                    logger.error(f"Error creating PDF: {str(e)}")
+            except Exception as e:
+                logger.error(f"Error creating formatted PDF: {str(e)}")
+            
+            # Fallback to text file if all conversions failed
+            if not original_format_path and not pdf_path:
+                text_path = output_dir / f"{base_name}.txt"
+                text_path.write_text(modified_content, encoding='utf-8')
+                logger.info(f"Saved as text file (fallback): {text_path}")
+                return (str(text_path), str(text_path))
+            
+            # Return paths (use text as fallback if one format failed)
+            if not original_format_path:
+                text_path = output_dir / f"{base_name}.txt"
+                text_path.write_text(modified_content, encoding='utf-8')
+                original_format_path = str(text_path)
+            
+            if not pdf_path:
+                pdf_path = original_format_path
+            
+            return (original_format_path, pdf_path)
+            
+        except Exception as e:
+            logger.error(f"Error saving modified CV with structure: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to save modified CV: {str(e)}"
             )

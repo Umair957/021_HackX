@@ -1,6 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+const apiUrl = process.env.NODE_ENV === 'production' 
+  ? process.env.PROD_SERVER_URL 
+  : process.env.DEV_SERVER_URL;
+
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -17,6 +21,8 @@ export async function POST(request: Request) {
     const cvContent = formData.get("cv_content") as string;
     const fixInstruction = formData.get("fix_instruction") as string;
     const category = formData.get("category") as string;
+    const originalFilename = formData.get("original_filename") as string;
+    const file = formData.get("file") as File | null;
 
     if (!cvContent || !fixInstruction) {
       return NextResponse.json(
@@ -30,9 +36,16 @@ export async function POST(request: Request) {
     backendFormData.append("cv_content", cvContent);
     backendFormData.append("fix_instruction", fixInstruction);
     backendFormData.append("category", category);
+    if (originalFilename) {
+      backendFormData.append("original_filename", originalFilename);
+    }
+    // Forward the original file if provided to preserve structure
+    if (file) {
+      backendFormData.append("file", file);
+    }
 
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000"}/api/v1/resumes/apply-fix`,
+      `${apiUrl}/api/v1/resume/apply-fix`,
       {
         method: "POST",
         headers: {

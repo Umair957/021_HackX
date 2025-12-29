@@ -6,7 +6,7 @@ from datetime import date
 class PersonalInfo(BaseModel):
     """Personal information schema"""
     full_name: str = Field(..., min_length=1, max_length=100)
-    email: str = Field(..., pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
     phone: Optional[str] = Field(None, max_length=20)
     location: Optional[str] = Field(None, max_length=100)
     title: Optional[str] = Field(None, max_length=100, description="Professional title/headline")

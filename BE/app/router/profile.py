@@ -131,7 +131,7 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
     return ProfileResponse(
         personal_info=PersonalInfo(
             full_name=profile.full_name,
-            email=profile.email or current_user.get("email", ""),
+            email=profile.email or current_user.get("email") or None,
             phone=profile.phone,
             location=str(profile.location) if profile.location else None,
             title=profile.title or profile.headline,
